@@ -1,0 +1,234 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
+#define MAX_ARGUMENTS 255
+#define	MAX_ARGUMENTS_CARACTERS 255
+#define MAX_COMMAND_LINE_LENGHT 65025
+
+#define NO_SHELL_COMMAND 2
+#define SHELL_COMMAND_ERROR 3
+
+void initShell();
+void parseCmd(char* cmd, char** params);
+int executeCmd(char** params);
+int changeDirectory(char* dir);
+int checkForShellCommands(char** params);
+
+int main(){
+
+	char cmd[MAX_COMMAND_LINE_LENGHT];
+	char* params[MAX_ARGUMENTS];
+
+	initShell();
+
+	while(1){
+
+		// Read command and exit on Ctrl+D (EOF)
+        if(fgets(cmd, sizeof(cmd), stdin) == NULL){
+                printf("\n");
+        	break;
+        }
+
+        // Remove trailing newline character, if any
+        if(cmd[strlen(cmd)-1] == '\n')
+            cmd[strlen(cmd)-1] = '\0';
+
+        // Parse cmd array into array of parameters
+        parseCmd(cmd, params);
+
+        // Execute command
+        if(executeCmd(params) == 0) break;
+	}
+
+	return 0;
+}
+
+
+void initShell(){
+
+    printf("\033[H\033[J"); // Clearing shell
+   // Print 1st command prompt
+   printf("> ");
+}
+
+
+// Parse cmd array into array of parameters
+void parseCmd(char* cmd, char** params){
+
+	char* temp;
+	size_t j = MAX_ARGUMENTS_CARACTERS;
+
+    for(int i = 0; i < MAX_ARGUMENTS; i++) {
+
+    	temp = strsep(&cmd, " ");
+
+        if(temp != NULL){
+            if( strlen(temp) > j){
+                printf("An argument include too many characters. It should be %lu char maximum.\n", j);
+                params[0] = "exit";
+            }
+        }
+
+        params[i] = temp;
+
+        if(params[i] == NULL)
+        	break;
+    }
+}
+
+int executeCmd(char** params){
+
+    //Check if the command is a shell command
+    if(checkForShellCommands(params) != NO_SHELL_COMMAND){
+        return 1;
+    }
+
+	// Fork process
+	pid_t pid = fork();
+
+	// Error
+	if(pid == -1){
+		char* error = strerror(errno);
+		printf("fork: %s\n", error);
+		return 1;
+	}
+
+	// Child process
+	else if(pid == 0){
+
+            int x;
+            char* env = getenv("PATH");
+            size_t buffer_size = strlen(env);
+            char* path[buffer_size];
+            int i = 1;
+
+
+            char * currDir = (char*)malloc(MAX_COMMAND_LINE_LENGHT * sizeof(char));
+            getcwd(currDir, MAX_COMMAND_LINE_LENGHT);
+            path[0] = currDir;
+
+            path[i] = strtok(env, ":");
+            while(path[i++] != NULL)
+                path[i] = strtok(NULL,":");
+
+            char tmp[2] = "/";
+
+            char cmd[strlen(params[0])];
+            strcpy(cmd, params[0]);
+
+            i = 0;
+            while(path[i]){
+
+                char buffer[MAX_COMMAND_LINE_LENGHT];
+
+                strcpy(buffer, path[i]);
+                strcat(strcat(buffer, tmp) , cmd);
+
+                /*if(access(buffer, X_OK) == 0){
+                    x = execv(buffer, params);
+                    // Error occurred
+                    char* error = strerror(errno);
+                    printf("%s: %s\n", buffer, error);
+                    return x;
+                }*/
+                params[0] = buffer;
+
+                x = execv(params[0], params);
+
+                i++;
+            }
+
+
+            // Error occurred
+            printf("%s: command not found\n", cmd);
+            return x;
+
+        }
+
+	// Parent process
+	else{
+		// Waiting for the child process to proceed
+		int child;
+		waitpid(pid, &child, 0);
+
+        if(WIFEXITED(child)){
+            int status = WEXITSTATUS(child);
+            printf("%d> ", status);
+        }
+        else
+            printf("127> ");
+
+		return 1;
+	}
+
+}
+
+int checkForShellCommands(char** params){
+
+    int ret = NO_SHELL_COMMAND;
+
+    if(!strcmp(params[0], "exit"))
+        exit(0);
+    else if(!strcmp(params[0], "cd"))
+        ret = changeDirectory(params[1]);
+
+    if(ret != NO_SHELL_COMMAND){
+        printf("%d>", ret);
+        return 1;
+    }
+
+    return NO_SHELL_COMMAND;
+}
+
+int changeDirectory(char* dir){
+
+    char* to;
+
+    if(!dir)
+        return SHELL_COMMAND_ERROR;
+    //Absolute path
+    else if(dir[0] == '/'){
+        to = (char*)malloc(strlen(dir) * sizeof(1));
+        to = strcpy(to, dir);
+    }
+    //Relative path
+    else{
+        int size = 50;
+
+        //Loop to be sure to have a buffer big enough to store the current directory name
+        while(1){
+            to = (char*)malloc(size * sizeof(char));
+
+            getcwd(to, size);
+
+            //If the buffer size was too small, double it
+            if(errno == ERANGE){
+                errno = 0;
+                size*= 2;
+                free(to);
+            }
+            else
+                break;
+        }
+
+        strcat(to, "/");
+        strcat(to, dir);
+    }
+
+    printf("cd to %s \n", to);
+    //Change current directory
+    int changed = chdir(to);
+
+    free(to);
+
+    //Test for errors
+    if(changed)
+        printf("%s: %s\n", dir, strerror(errno));
+
+    return 0;
+}
