@@ -7,14 +7,23 @@
 #include <sys/types.h>
 
 #define MAX_ARGUMENTS 255
-#define	MAX_ARGUMENTS_CARACTERS 255
-#define MAX_COMMAND_LINE_LENGHT 65025
+#define MAX_ARGUMENTS_CARACTERS 255
+#define MAX_COMMAND_LINE_LENGHT 65026 // (255*255 + 1 for \0)
 
 #define NO_SHELL_COMMAND 2
 #define SHELL_COMMAND_ERROR 3
+#define COMMAND_NOT_FOUND_ERROR 4
 
-void initShell();
-void parseCmd(char* cmd, char** params);
+/* Parse cmd array into array of parameters
+ *
+ *ARGUMENTS :
+ * -cmd : a sting of parameter divided by spaces
+ * -params : a array of string, must be non-NULL
+ *
+ *RETURN
+ * - 0 if successful, 1 otherwise
+ */
+int parseCmd(char* cmd, char** params);
 
 /*
  * Execute the command in params[0]
@@ -53,21 +62,20 @@ int checkForShellCommands(char** params);
 
 int main(){
 
-	char cmd[MAX_COMMAND_LINE_LENGHT];
-	char* params[MAX_ARGUMENTS];
+    char cmd[MAX_COMMAND_LINE_LENGHT];
+    char* params[MAX_ARGUMENTS];
 
-	initShell();
+    while(1){
 
-	while(1){
+        // Clear input/outpout stream
+        fflush(stdin);
+        fflush(stdout);
 
         printf("> ");
 
-		// Read command and exit on Ctrl+D (EOF)
-        if(fgets(cmd, sizeof(cmd), stdin) == NULL){
-                printf("\n");
-        	break;
-        }
-
+        // Read command and exit on Ctrl+D (EOF)
+        if(fgets(cmd, sizeof(cmd), stdin) == NULL)
+            break;
 
         // Remove trailing newline character, if any
         if(cmd[strlen(cmd)-1] == '\n')
@@ -78,45 +86,41 @@ int main(){
             continue;
 
         // Parse cmd array into array of parameters
-        parseCmd(cmd, params);
+        if(parseCmd(cmd, params) == 1)
+            continue;
 
         // Execute command
         executeCmd(params);
-	}
 
-	return 0;
+    }
+
+    return 0;
 }
 
 
-void initShell(){
+int parseCmd(char* cmd, char** params){
 
-    printf("\033[H\033[J"); // Clearing shell
-   // Print 1st command prompt
-}
-
-
-// Parse cmd array into array of parameters
-void parseCmd(char* cmd, char** params){
-
-	char* temp;
-	size_t j = MAX_ARGUMENTS_CARACTERS;
+    char* temp;
+    size_t j = MAX_ARGUMENTS_CARACTERS;
 
     for(int i = 0; i < MAX_ARGUMENTS; i++) {
 
-    	temp = strsep(&cmd, " ");
+        temp = strsep(&cmd, " ");
 
         if(temp != NULL){
             if( strlen(temp) > j){
                 printf("An argument include too many characters. It should be %lu char maximum.\n", j);
-                params[0] = "exit";
+                return 1;
             }
         }
 
         params[i] = temp;
 
         if(params[i] == NULL)
-        	break;
+            break;
     }
+
+    return 0;
 }
 
 void executeCmd(char** params){
@@ -126,18 +130,18 @@ void executeCmd(char** params){
         return;
     }
 
-	// Fork process
-	pid_t pid = fork();
+    // Fork process
+    pid_t pid = fork();
 
-	// Error
-	if(pid == -1){
-		char* error = strerror(errno);
-		printf("fork: %s\n", error);
-		return;
-	}
+    // Error
+    if(pid == -1){
+        char* error = strerror(errno);
+        printf("fork: %s", error);
+        return;
+    }
 
-	// Child process
-	else if(pid == 0){
+    // Child process
+    else if(pid == 0){
 
             int x = 0;
 
@@ -158,7 +162,6 @@ void executeCmd(char** params){
             }
 
             //Search for the command in the PATH environment
-
 
             //Create a copy of the environment PATH to be sure to not modify it
             char* env = getenv("PATH");
@@ -186,14 +189,6 @@ void executeCmd(char** params){
 
                 strcpy(buffer, path[i]);
                 strcat(strcat(buffer, "/") , cmd);
-
-                /*if(access(buffer, X_OK) == 0){
-                    x = execv(buffer, params);
-                    // Error occurred
-                    char* error = strerror(errno);
-                    printf("%s: %s\n", buffer, error);
-                    return x;
-                }*/
                 params[0] = buffer;
 
                 x = execv(params[0], params);
@@ -204,25 +199,22 @@ void executeCmd(char** params){
 
             // Command wasn't found in PATH
             printf("%s: command not found\n", cmd);
-            exit(x);
+            exit(COMMAND_NOT_FOUND_ERROR);
 
         }
 
-	// Parent process
-	else{
-		// Waiting for the child process to proceed
-		int child;
-		waitpid(pid, &child, 0);
+    // Parent process
+    else{
+        // Waiting for the child process to proceed
+        int child;
+        waitpid(pid, &child, 0);
 
         if(WIFEXITED(child)){
             int status = WEXITSTATUS(child);
             printf("%d", status);
         }
-        else
-            printf("127");
-
-		return;
-	}
+        return;
+    }
 
 }
 
