@@ -67,9 +67,6 @@ int main(){
 
     while(1){
 
-        // Clear input/outpout stream
-        fflush(stdin);
-        fflush(stdout);
 
         printf("> ");
 
@@ -81,7 +78,7 @@ int main(){
         if(cmd[strlen(cmd)-1] == '\n')
             cmd[strlen(cmd)-1] = '\0';
 
-        //Check if there is a command
+        //Check if there is a input
         if(strlen(cmd) == 0)
             continue;
 
@@ -91,6 +88,10 @@ int main(){
 
         // Execute command
         executeCmd(params);
+
+        // Clear input/output stream
+        fflush(stdin);
+        fflush(stdout);
 
     }
 
@@ -106,6 +107,12 @@ int parseCmd(char* cmd, char** params){
     for(int i = 0; i < MAX_ARGUMENTS; i++) {
 
         temp = strsep(&cmd, " ");
+
+        //Ignore useless spaces
+        if(temp && strlen(temp) == 0){
+            i--;
+            continue;
+        }
 
         if(temp != NULL){
             if( strlen(temp) > j){
@@ -136,7 +143,7 @@ void executeCmd(char** params){
     // Error
     if(pid == -1){
         char* error = strerror(errno);
-        printf("fork: %s", error);
+        printf("fork: %s\n", error);
         return;
     }
 
@@ -195,7 +202,6 @@ void executeCmd(char** params){
 
                 i++;
             }
-
 
             // Command wasn't found in PATH
             printf("%s: command not found\n", cmd);
