@@ -62,6 +62,7 @@ int checkForShellCommands(char** params);
 
 int main(){
 
+
     char cmd[MAX_COMMAND_LINE_LENGHT];
     char* params[MAX_ARGUMENTS];
 
@@ -168,6 +169,15 @@ void executeCmd(char** params){
                 exit(x);
             }
 
+            //Check if it's a absolute path to a program
+            if(strlen(params[0]) > 1 && params[0][0] ==  '/'){
+
+            x = execv(params[0], params);
+
+            exit(x);
+            }
+
+
             //Search for the command in the PATH environment
 
             //Create a copy of the environment PATH to be sure to not modify it
@@ -204,7 +214,7 @@ void executeCmd(char** params){
             }
 
             // Command wasn't found in PATH
-            printf("%s: command not found\n", cmd);
+            printf("%s: command not found\n\n", cmd);
             exit(COMMAND_NOT_FOUND_ERROR);
 
         }
@@ -217,7 +227,7 @@ void executeCmd(char** params){
 
         if(WIFEXITED(child)){
             int status = WEXITSTATUS(child);
-            printf("%d", status);
+            printf("\n%d", status);
         }
         return;
     }
@@ -234,7 +244,7 @@ int checkForShellCommands(char** params){
         ret = changeDirectory(params[1]);
 
     if(ret != NO_SHELL_COMMAND){
-        printf("%d", ret);
+        printf("\n%d", ret);
         return 0;
     }
 
