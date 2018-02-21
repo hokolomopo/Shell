@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
@@ -68,12 +69,13 @@ int main(){
 
 
     char cmd[MAX_COMMAND_LINE_LENGHT];
-    char* params[MAX_ARGUMENTS];
+    char* params[MAX_ARGUMENTS + 1]; //(plus 1 for the \0 char)
 
     while(1){
 
-
+        fflush(stdout);
         printf("> ");
+        fflush(stdout);
 
         // Read command and exit on Ctrl+D (EOF)
         if(fgets(cmd, sizeof(cmd), stdin) == NULL)
@@ -95,10 +97,10 @@ int main(){
         executeCmd(params);
 
         // Clear input/output stream
-        fflush(stdin);
+        //fflush(stdin);
         fflush(stdout);
 
-        for(int i = 0;params[i];i++)
+        for(int i = 0; params[i] ;i++)
             free(params[i]);
 
     }
@@ -117,11 +119,17 @@ int parseCmd(char* cmd, char** params){
         temp = calloc(MAX_ARGUMENTS_CARACTERS + 1, sizeof(char) );
         int offset = 0;
         bool quote = false;
+        bool space = true;
 
         while(offset < MAX_ARGUMENTS_CARACTERS){
 
             //Check if we're at the end of the command
             if(cmd[index+offset] == '\0'){
+                if(space){
+                    free(temp);
+                    temp = NULL;
+                    break;
+                }
                 if(!quote){
                     memcpy(temp, &cmd[index], offset);
                     break;
@@ -135,6 +143,20 @@ int parseCmd(char* cmd, char** params){
                 break;
             }
 
+            //Check if space is there's a space, and if the space is the end of the parameter
+            if( !isspace(cmd[index+offset]) )
+               space = false;
+            else{
+                if(!quote && !space){
+                memcpy(temp, &cmd[index], offset);
+                break;
+                }
+                else if(space){
+                index++;
+                continue;
+                }
+            }
+
             if(cmd[index+offset] == '"' || cmd[index+offset] == '\''){
                 //Open quote
                 if(!quote){
@@ -143,25 +165,21 @@ int parseCmd(char* cmd, char** params){
                 //Close quote :
                 else{
                     memcpy(temp, &cmd[index+1], offset-1);
-                    offset+=2;
+                    offset++;
                     break;
                 }
             }
 
             //Backslash to indicate special character
-            else if(cmd[index+offset] == '\\'){
-                //Delete the '\\' and shift everything
-                for(unsigned int k = index + offset;k < strlen(cmd);k++)
+            else if(cmd[index+offset] == '\\' && !quote){
+                //Delete the '\\' and shift everything, then skip the next character
+                for(unsigned    int k = index + offset;k < strlen(cmd);k++)
                     cmd[k] = cmd[k+1];
             }
 
-            //Check if space is there's a space, and if the space is the end of the parameter
-            else if((cmd[index+offset] == ' ' && !quote) ){
-                memcpy(temp, &cmd[index], offset);
-                break;
-            }
-
             offset++;
+
+
         }
 
 
@@ -175,7 +193,7 @@ int parseCmd(char* cmd, char** params){
         if(cmd[index+offset] == '\0')
             break;
 
-        index += offset+1;
+        index += offset;
     }
 
     params[i+1] = NULL;
@@ -265,11 +283,10 @@ void executeCmd(char** params){
                 i++;
             }
 
-            for(int i = 0;params[i];i++)
-                free(params[i]);
 
             // Command wasn't found in PATH
-            printf("%s: command not found\n\n", cmd);
+            printf("%s: command not found\n", cmd);
+
             exit(COMMAND_NOT_FOUND_ERROR);
 
         }
@@ -294,7 +311,7 @@ int checkForShellCommands(char** params){
     int ret = NO_SHELL_COMMAND;
 
     if(!strcmp(params[0], "exit")){
-        for(int i = 0;params[i];i++)
+        for(int i = 0; params[i] ;i++)
             free(params[i]);
         exit(0);
     }
