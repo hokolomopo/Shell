@@ -110,9 +110,7 @@ int main(){
 int parseCmd(char* cmd, char** params){
 
     char* temp;
-    char tmp[1] = "";
     int index = 0;
-    bool end = false;
     int i;
 
     for(i = 0; i < MAX_ARGUMENTS-1; i++) {
@@ -152,10 +150,9 @@ int parseCmd(char* cmd, char** params){
 
             //Backslash to indicate special character
             else if(cmd[index+offset] == '\\'){
-                //Delete the '\\' and shift everything, then skip the next character
-                for(int k = index + offset;k < strlen(cmd);k++)
+                //Delete the '\\' and shift everything
+                for(unsigned int k = index + offset;k < strlen(cmd);k++)
                     cmd[k] = cmd[k+1];
-                offset++;
             }
 
             //Check if space is there's a space, and if the space is the end of the parameter
@@ -268,6 +265,9 @@ void executeCmd(char** params){
                 i++;
             }
 
+            for(int i = 0;params[i];i++)
+                free(params[i]);
+
             // Command wasn't found in PATH
             printf("%s: command not found\n\n", cmd);
             exit(COMMAND_NOT_FOUND_ERROR);
@@ -293,8 +293,11 @@ int checkForShellCommands(char** params){
 
     int ret = NO_SHELL_COMMAND;
 
-    if(!strcmp(params[0], "exit"))
+    if(!strcmp(params[0], "exit")){
+        for(int i = 0;params[i];i++)
+            free(params[i]);
         exit(0);
+    }
     else if(!strcmp(params[0], "cd"))
         ret = changeDirectory(params[1]);
 
