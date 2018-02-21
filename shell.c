@@ -14,6 +14,10 @@
 #define SHELL_COMMAND_ERROR 3
 #define COMMAND_NOT_FOUND_ERROR 4
 
+typedef int bool;
+#define true 1
+#define false 0
+
 /* Parse cmd array into array of parameters
  *
  *ARGUMENTS :
@@ -87,12 +91,18 @@ int main(){
         if(parseCmd(cmd, params) == 1)
             continue;
 
+        for(int i = 0;params[i];i++)
+            printf("param %d: %s\n",i, params[i]);
+
         // Execute command
         executeCmd(params);
 
         // Clear input/output stream
         fflush(stdin);
         fflush(stdout);
+
+        for(int i = 0;params[i];i++)
+            free(params[i]);
 
     }
 
@@ -103,32 +113,80 @@ int main(){
 int parseCmd(char* cmd, char** params){
 
     char* temp;
-    size_t j = MAX_ARGUMENTS_CARACTERS;
+    char tmp[1] = "";
+    int index = 0;
+    bool end = false;
+    int i;
 
-    for(int i = 0; i < MAX_ARGUMENTS; i++) {
+    for(i = 0; i < MAX_ARGUMENTS-1; i++) {
+        temp = calloc(MAX_ARGUMENTS_CARACTERS + 1, sizeof(char) );
+        int offset = 0;
+        bool quote = false;
 
-        temp = strsep(&cmd, " ");
+        while(offset < MAX_ARGUMENTS_CARACTERS){
 
-        //Ignore useless spaces
-        if(temp && strlen(temp) == 0){
-            i--;
-            continue;
-        }
+            //Check if we're at the end of the command
+            if(cmd[index+offset] == '\0'){
+                if(!quote){
+                    memcpy(temp, &cmd[index], offset);
+                    break;
+                }
+                //If there's still an open quote,there's an error somewhere
+                else{
+                    printf("Error in quotes\n\n");
+                    return 1;
+                }
 
-        if(temp != NULL){
-            if( strlen(temp) > j){
-                printf("An argument include too many characters. It should be %lu char maximum.\n", j);
-                return 1;
+                break;
             }
+
+            if(cmd[index+offset] == '"' || cmd[index+offset] == '\''){
+                //Open quote
+                if(!quote){
+                    quote = true;
+                }
+                //Close quote :
+                else{
+                    memcpy(temp, &cmd[index+1], offset-1);
+                    offset+=2;
+                    break;
+                }
+            }
+
+            //Backslash to indicate special character
+            else if(cmd[index+offset] == '\\'){
+                //Delete the '\\' and shift everything, then skip the next character
+                for(int k = index + offset;k < strlen(cmd);k++)
+                    cmd[k] = cmd[k+1];
+                offset++;
+            }
+
+            //Check if space is there's a space, and if the space is the end of the parameter
+            else if((cmd[index+offset] == ' ' && !quote) ){
+                memcpy(temp, &cmd[index], offset);
+                break;
+            }
+
+            offset++;
         }
+
 
         params[i] = temp;
 
-        if(params[i] == NULL)
+        if(offset >= MAX_ARGUMENTS_CARACTERS && strlen(temp) == 0){
+            printf("An argument includes too many characters. It should be %d char maximum.\n\n", MAX_ARGUMENTS_CARACTERS);
+            return 1;
+        }
+
+        if(cmd[index+offset] == '\0')
             break;
+
+        index += offset+1;
     }
 
+    params[i+1] = NULL;
     return 0;
+
 }
 
 void executeCmd(char** params){
