@@ -91,9 +91,6 @@ int main(){
         if(parseCmd(cmd, params) == 1)
             continue;
 
-        for(int i = 0;params[i];i++)
-            printf("param %d: %s\n",i, params[i]);
-
         // Execute command
         executeCmd(params);
 
