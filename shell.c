@@ -19,6 +19,15 @@ typedef int bool;
 #define true 1
 #define false 0
 
+int printHostName();
+int sysBuiltIn(char** params);
+int printCpuModel();
+int cpuBuiltIn(char** params);
+int strcmpbeginning(const char* big, const char* small);
+int printCpuNFreq(int n);
+int searchBeginning(FILE* f, char* begin, char* buffer);
+
+
 /* Parse cmd array into array of parameters
  *
  *ARGUMENTS :
@@ -66,7 +75,6 @@ int changeDirectory(char* dir);
 int checkForShellCommands(char** params);
 
 int main(){
-
 
     char cmd[MAX_COMMAND_LINE_LENGHT];
     char* params[MAX_ARGUMENTS + 1]; //(plus 1 for the \0 char)
@@ -317,6 +325,8 @@ int checkForShellCommands(char** params){
     }
     else if(!strcmp(params[0], "cd"))
         ret = changeDirectory(params[1]);
+    else if(!strcmp(params[0], "sys"))
+        ret = sysBuiltIn(params);
 
     if(ret != NO_SHELL_COMMAND){
         printf("\n%d", ret);
@@ -372,6 +382,166 @@ int changeDirectory(char* dir){
         printf("%s: %s\n", dir, strerror(errno));
         return SHELL_COMMAND_ERROR;
     }
+
+    return 0;
+}
+
+int sysBuiltIn(char** params){
+
+    if(!params[1]){
+        printf("sys : not enough aruments\n");
+        return 1;
+    }
+
+    if(!strcmp(params[1], "hostname"))
+        return printHostName();
+    else if(!strcmp(params[1], "cpu"))
+        return cpuBuiltIn(params);
+
+    printf("%s: no such command for sys\n", params[1]);
+    return 1;
+}
+
+int cpuBuiltIn(char** params){
+
+    if(!params[2]){
+        printf("sys cpu: not enough aruments\n");
+        return 1;
+    }
+
+    if(!strcmp(params[2], "model"))
+        return printCpuModel();
+    if(!strcmp(params[2], "freq")){
+        if(!params[3]){
+            printf("sys cpu freq: need the processor number as argument\n");
+            return 1;
+        }
+        return printCpuNFreq(atoi(params[3]));
+    }
+
+    printf("%s: no such command for sys cpu\n", params[2]);
+    return 1;
+}
+
+int printHostName(){
+
+  char* hostnamePath = "/proc/sys/kernel/hostname";
+  char buff[255];
+
+  FILE* f;
+  f = fopen(hostnamePath, "r");
+
+  if(!f){
+      printf("Unable to read hostname\n");
+      return 1;
+  }
+
+  fscanf(f, "%s", buff);
+  printf("%s \n", buff);
+
+  fclose(f);
+
+  return 0;
+
+}
+
+
+int printCpuModel(){
+
+    char* cpuInfoPath = "/proc/cpuinfo";
+    char buff[255];
+
+    FILE* f;
+    f = fopen(cpuInfoPath, "r");
+
+    if(!f){
+        printf("Unable to read cpu informations\n");
+        return 1;
+    }
+
+    if(searchBeginning(f, "model name", buff)){
+        printf("Unable to read cpu informations\n");
+        return 1;
+    }
+
+
+    printf("%s", buff);
+
+    fclose(f);
+
+    return 0;
+
+}
+
+int strcmpbeginning(const char* big, const char* small){
+
+    if(!big || !small || (strlen(big) < strlen(small)))
+        return 0;
+
+    int i = 0;
+    while(small[i] != '\0'){
+        if(big[i] != small[i])
+            return 0;
+        i++;
+    }
+
+    return 1;
+}
+
+int searchBeginning(FILE* f, char* begin, char* buffer){
+    if(!begin || !buffer)
+        return 1;
+
+    do{
+        if(!fgets(buffer, 255, f))
+            return 1;
+        if(strcmpbeginning(buffer, begin))
+            return 0;
+    }while(1);
+
+    return 0;
+}
+
+int printCpuNFreq(int n){
+
+    char* cpuInfoPath = "/proc/cpuinfo";
+    char buff[255];
+
+    FILE* f;
+    f = fopen(cpuInfoPath, "r");
+
+    if(!f){
+        printf("Unable to read cpu informations\n");
+        return 1;
+    }
+
+    while(1){
+
+        if(searchBeginning(f, "processor", buff)){
+            printf("Unable to read cpu informations\n");
+            return 1;
+        }
+
+        strtok(buff, ":");
+        char* numberStr = strtok(NULL, ":");
+        int number = atoi(numberStr);
+
+        if(number == n){
+            if(searchBeginning(f, "cpu MHz", buff)){
+                printf("Unable to read cpu informations\n");
+                return 1;
+            }
+
+            printf("%s ", buff);
+            break;
+        }
+        else if(number > n){
+            printf("No process number %d\n", n);
+            return 1;
+        }
+    }
+
+    fclose(f);
 
     return 0;
 }
