@@ -397,7 +397,7 @@ int sysBuiltIn(char** params){
         return printHostName();
     else if(!strcmp(params[1], "cpu"))
         return cpuBuiltIn(params);
-    else if(!strcmp(params[1], "ip"))
+    else if(!strcmp(params[1], "ip") && !strcmp(params[2], "addr") && params[3] != NULL)
         return ipBuiltIn(params);
 
     printf("%s: no such command for sys\n", params[1]);
@@ -549,18 +549,19 @@ int printCpuNFreq(int n){
 }
 
 int ipBuiltIn(char** params){
-     
-    if (strlen(params) < 2) 
-        return 1;
     
     FILE *fp = fopen("/proc/net/arp", "r");
     
-    char ip[99], hw[99], flags[99], mac[99], mask[99], dev[99], dummy[99];
+    char ip[99], hwt[99], flags[99], hwa[99], mask[99], dev[99], dummy[99];
     
-    fgets(dummy, 99, fp); //header line
+    fgets(dummy, 99, fp); // get rid of the header line
     
-    while (fscanf(fp, "%s %s %s %s %s %s\n", ip, hw, flags, mac, mask, dev) != EOF)
-            printf("%s\n",ip);
+    while (fscanf(fp, "%s %s %s %s %s %s\n", ip, hwt, flags, hwa, mask, dev) != EOF){
+        if(!strcmp(params[3], dev)){
+            printf("ip address : %s\n",ip);
+            printf("mask : %s\n", mask);
+        }
+    }
     
     return 0;
 }
