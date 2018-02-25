@@ -397,7 +397,7 @@ int sysBuiltIn(char** params){
         return printHostName();
     else if(!strcmp(params[1], "cpu"))
         return cpuBuiltIn(params);
-    else if(!strcmp(params[1], "ip") && !strcmp(params[2], "addr") && params[3] != NULL)
+    else if(!strcmp(params[1], "ip"))
         return ipBuiltIn(params);
 
     printf("%s: no such command for sys\n", params[1]);
@@ -446,7 +446,6 @@ int printHostName(){
   return 0;
 
 }
-
 
 int printCpuModel(){
 
@@ -550,18 +549,34 @@ int printCpuNFreq(int n){
 
 int ipBuiltIn(char** params){
     
+    if( !strcmp(params[2], "ip") && !strcmp(params[3], "addr") && params[3] != NULL){
+        if(params[4] == NULL)
+            return printDevIpAddressMask(params);
+        if(params[6] == NULL)
+            return setDevIpAddressMask(params);
+        }
+    
+    printf("sys : Invalid arguments\n");
+    return 1;
+}
+
+int printDevIpAddressMask(char** params){
     FILE *fp = fopen("/proc/net/arp", "r");
     
-    char ip[99], hwt[99], flags[99], hwa[99], mask[99], dev[99], dummy[99];
+    char ip[99], hwt[99], flags[99], hwa[99], mask[99], dev[99], tmp[99];
     
-    fgets(dummy, 99, fp); // get rid of the header line
+    fgets(tmp, 99, fp); // get rid of the header line
     
     while (fscanf(fp, "%s %s %s %s %s %s\n", ip, hwt, flags, hwa, mask, dev) != EOF){
-        if(!strcmp(params[3], dev)){
+        if(strcmp(params[3], dev)){
             printf("ip address : %s\n",ip);
             printf("mask : %s\n", mask);
         }
     }
     
+    return 0;
+}
+
+int setDevIpAddressMask(char** params){
     return 0;
 }
