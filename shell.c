@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 
@@ -80,7 +81,8 @@ int main(){
     char* params[MAX_ARGUMENTS + 1]; //(plus 1 for the \0 char)
 
     while(1){
-
+        
+        // Clear output stream
         fflush(stdout);
         printf("> ");
         fflush(stdout);
@@ -104,8 +106,6 @@ int main(){
         // Execute command
         executeCmd(params);
 
-        // Clear input/output stream
-        //fflush(stdin);
         fflush(stdout);
 
         for(int i = 0; params[i] ;i++)
@@ -397,6 +397,8 @@ int sysBuiltIn(char** params){
         return printHostName();
     else if(!strcmp(params[1], "cpu"))
         return cpuBuiltIn(params);
+    else if(!strcmp(params[1], "ip"))
+        return ipBuiltIn(params);
 
     printf("%s: no such command for sys\n", params[1]);
     return 1;
@@ -543,5 +545,22 @@ int printCpuNFreq(int n){
 
     fclose(f);
 
+    return 0;
+}
+
+int ipBuiltIn(char** params){
+     
+    if (strlen(params) < 2) 
+        return 1;
+    
+    FILE *fp = fopen("/proc/net/arp", "r");
+    
+    char ip[99], hw[99], flags[99], mac[99], mask[99], dev[99], dummy[99];
+    
+    fgets(dummy, 99, fp); //header line
+    
+    while (fscanf(fp, "%s %s %s %s %s %s\n", ip, hw, flags, mac, mask, dev) != EOF)
+            printf("%s\n",ip);
+    
     return 0;
 }
