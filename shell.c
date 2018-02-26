@@ -7,6 +7,9 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <arpa/inet.h>
 
 #define MAX_ARGUMENTS 255
 #define MAX_ARGUMENTS_CARACTERS 255
@@ -62,7 +65,6 @@ void executeCmd(char** params);
  */
 int changeDirectory(char* dir);
 
-
 /*
  * Check if the command in params[0] is a shell command (e.g. exit, cd, ...) and execute it
  *
@@ -115,7 +117,6 @@ int main(){
 
     return 0;
 }
-
 
 int parseCmd(char* cmd, char** params){
 
@@ -557,7 +558,7 @@ int ipBuiltIn(char** params){
         }
     
     printf("sys : Invalid arguments\n");
-    return 1;
+    return -1;
 }
 
 int printDevIpAddressMask(char** params){
@@ -578,5 +579,53 @@ int printDevIpAddressMask(char** params){
 }
 
 int setDevIpAddressMask(char** params){
+    
+    unsigned char ip_address[15];
+    unsigned char mask[15];
+    int fd;
+    struct ifreq ifr;
+    
+    strncpy(ip_address, params[4], sizeof(ip_address));
+    strncpy(mask, params[5], sizeof(mask));
+     
+    //AF_INET - to define network interface IPv4
+    //Creating soket for it.
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    
+    if(fd == -1){
+        perror("Socket: ");
+        return -1;
+    }
+     
+    //AF_INET - to define IPv4 Address type.
+    ifr.ifr_addr.sa_family = AF_INET;
+    ifr.ifr_netmask.sa_family = AF_INET;
+     
+    //define the ifr_name params[3] == DEV
+    //port name where network attached.
+    memcpy(ifr.ifr_name, params[3], IFNAMSIZ);
+     
+    //defining the sockaddr_in
+    
+    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
+     
+    //convert ip address in correct format to write
+    inet_pton(AF_INET, ip_address, &addr->sin_addr);
+    
+    //Setting the Ip Address using ioctl
+    ioctl(fd, SIOCSIFADDR, &ifr);
+    
+    //convert mask in correct format to write
+    inet_pton(AF_INET, mask, &addr->sin_addr);
+     
+    //Setting the mask using ioctl
+    ioctl(fd, SIOCSIFNETMASK, &ifr);
+    
+    //closing fd
+    close(fd);
+    
+    printf("GREAT SUCCESS !!!!\n");
+     
     return 0;
+    
 }
