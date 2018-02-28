@@ -23,7 +23,7 @@ typedef int bool;
 #define true 1
 #define false 0
 
-
+//Structure and global variables to manage shell variables ($)
 typedef struct{
     char* varName;
     char* varValue;
@@ -33,15 +33,102 @@ static int numberOfVars = 10;
 static shellVariable* vars;
 static int varCount = 0;
 
-int printHostName();
+/*
+ * Manage all the sys built in in the shell
+ *
+ *ARGUMENTS :
+ * - params : an array of parameters, must be terminated with a NULL pointer
+ *
+ *RETURN :
+ * - the return value of the built-in if a built-in corresponding to the parameters was found, 1 otherwise
+ */
 int sysBuiltIn(char** params);
-int printCpuModel();
+
+/*
+ * Manage all the sys cpu built in in the shell
+ *
+ *ARGUMENTS :
+ * - params : an array of parameters, must be terminated with a NULL pointer
+ *
+ *RETURN :
+ * - the return value of the built-in if a built-in corresponding to the parameters was found, 1 otherwise
+ */
 int cpuBuiltIn(char** params);
-int strcmpbeginning(const char* big, const char* small);
+
+int printHostName();
+
+/*
+ * Print the cpu model
+ *
+ *RETURN :
+ * - 0 if it was successful, 1 otherwise
+ */
+int printCpuModel();
+
+/*
+ * Print the N cpu frequency
+ *
+ *ARGUMENTS :
+ * - n : the number of the cpu we want to print the frequency of
+ *
+ *RETURN :
+ * - 0 if it was successful, SHELL_COMMAND_ERROR otherwise
+ */
 int printCpuNFreq(int n);
+
+/*
+ * Compare the beginning of the string "big" with he string "small"
+ *
+ *ARGUMENTS :
+ * - big, small : 2 strings
+ *
+ *RETURN :
+ * - 0 if a char* is NULL, or if the small string is smaller than the bug string
+ * - 1 if the beginning of the big string is equal to the small string, 0 otherwise
+ */
+int strcmpbeginning(const char* big, const char* small);
+
+/*
+ * Search in a file a line beginning with the string "begin" and put the line in the buffer.
+ *  Won't work if a line is longer than 254 characters.
+ *
+ *ARGUMENTS :
+ * - f : a pointer to a FILE
+ * - begin : the string we will search in the beginning of the lines of the files
+ * - buffer : a buffer in which the function store the read line. Must be at least 255 characters.
+ *
+ *RETURN :
+ * - 0 if a char* is NULL, or if the small string is smaller than the bug string
+ * - 1 if the beginning of the big string is equal to the small string, 0 otherwise
+ */
 int searchBeginning(FILE* f, char* begin, char* buffer);
+
+/*
+ * Replace the strings beginning by $in the array param by their shell variable value
+ *  and create a create/update a shell variable if param[0] has the format "varName=varValue"
+ *
+ *ARGUMENTS :
+ * - params : an array of string, must be terminated with a NULL pointer
+ *
+ */
 void manageShellVariables(char **params);
+
+/*
+ * Set the last returned value by a process in the $? variable, and print the value
+ *
+ *ARGUMENTS :
+ * - ret : the last returned value by a process
+ *
+ */
 void setReturn(int ret);
+
+/*
+ * Set the pid of the last background process in the $! variable
+ *
+ *ARGUMENTS :
+ * - pid : pid of the last background process
+ *
+ */
 void setBackgroundPid(int pid);
 
 /* Parse cmd array into array of parameters
@@ -56,11 +143,10 @@ void setBackgroundPid(int pid);
 int parseCmd(char* cmd, char** params);
 
 /*
- * Execute the command in params[0]
+ * Execute the command in params[0], if the command in params[0] is NULL, just print a newline character
  *
  *ARGUMENTS :
- * - params : a char* array, params[0] is expected to be a valid pointers to null-terminated string,
- *              the list of parameters must be terminated with a NULL pointer
+ * - params : a char* array ,the list of parameters must be terminated with a NULL pointer
  *
  */
 void executeCmd(char** params);
@@ -481,7 +567,7 @@ int cpuBuiltIn(char** params){
             return 1;
         }
         if(!params[4])
-        return printCpuNFreq(atoi(params[3]));
+            return printCpuNFreq(atoi(params[3]));
         return setCpuFreq(params[3],params[4]);
     }
 
@@ -563,7 +649,7 @@ int strcmpbeginning(const char* big, const char* small){
 }
 
 int searchBeginning(FILE* f, char* begin, char* buffer){
-    if(!begin || !buffer)
+    if(!begin || !buffer || !f)
         return 1;
 
     do{
