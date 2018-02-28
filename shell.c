@@ -419,7 +419,9 @@ int cpuBuiltIn(char** params){
             printf("sys cpu freq: need the processor number as argument\n");
             return 1;
         }
+        if(!params[4])
         return printCpuNFreq(atoi(params[3]));
+        return setCpuFreq(params[3],params[4]);
     }
 
     printf("%s: no such command for sys cpu\n", params[2]);
@@ -547,6 +549,28 @@ int printCpuNFreq(int n){
 
     return 0;
 }
+
+int setCpuFreq(char *cpu, char *freq){
+    
+    FILE *f;
+    const char *path1 = "/sys/devices/system/cpu/cpu";
+    const char *path2 = "/cpufreq/scaling_setspeed";
+    char path[256];
+    char nbCpu[2] = {cpu[0],cpu[1]}; 
+    
+    
+    strcpy(path, path1);
+    strcat(path, nbCpu);
+    strcat(path, path2);
+    
+    if(!(f = fopen(path, "w"))){
+        close(f);
+        printf("Wrong cpu numbre: %d", cpu);
+        return 1;
+    }
+    
+    return 0;
+    }
 
 int ipBuiltIn(char** params){
     
