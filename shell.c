@@ -556,7 +556,7 @@ int setCpuFreq(char *cpu, char *freq){
     const char *path1 = "/sys/devices/system/cpu/cpu";
     const char *path2 = "/cpufreq/scaling_setspeed";
     char path[256];
-    char nbCpu[2] = {cpu[0],cpu[1]}; 
+    char nbCpu[3] = {cpu[0],cpu[1], '\0'}; 
     
     
     strcpy(path, path1);
@@ -564,10 +564,14 @@ int setCpuFreq(char *cpu, char *freq){
     strcat(path, path2);
     
     if(!(f = fopen(path, "w"))){
-        close(f);
-        printf("Wrong cpu numbre: %d", cpu);
+        fclose(f);
+        printf("Wrong cpu numbre");
         return 1;
     }
+    
+    fprintf(f, "%s", freq);
+    
+    fclose(f);
     
     return 0;
     }
