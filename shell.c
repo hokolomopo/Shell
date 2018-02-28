@@ -430,14 +430,14 @@ int cpuBuiltIn(char** params){
 
 int printHostName(){
 
-  char* hostnamePath = "/proc/sys/kernel/hostname";
   char buff[255];
 
   FILE* f;
-  f = fopen(hostnamePath, "r");
+  f = fopen("/proc/sys/kernel/hostname", "r");
 
-  if(!f){
+  if(f == NULL){
       printf("Unable to read hostname\n");
+      fclose(f);
       return 1;
   }
 
