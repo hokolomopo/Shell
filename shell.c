@@ -23,6 +23,16 @@ typedef int bool;
 #define true 1
 #define false 0
 
+
+typedef struct{
+    char* varName;
+    char* varValue;
+}shellVariable;
+
+static int numberOfVars = 10;
+static shellVariable* vars;
+static int varCount = 0;
+
 int printHostName();
 int sysBuiltIn(char** params);
 int printCpuModel();
@@ -30,7 +40,9 @@ int cpuBuiltIn(char** params);
 int strcmpbeginning(const char* big, const char* small);
 int printCpuNFreq(int n);
 int searchBeginning(FILE* f, char* begin, char* buffer);
-
+void manageShellVariables(char **params);
+void setReturn(int ret);
+void setBackgroundPid(int pid);
 
 /* Parse cmd array into array of parameters
  *
@@ -118,6 +130,27 @@ int main(){
     return 0;
 }
 
+void setReturn(int ret){
+    printf("\n%d", ret);
+    for(int i =0;i < varCount;i++)
+        if(!strcmp("?", vars[i].varName)){
+            free(vars[i].varValue);
+            //String of 12 chars should be enough for a int
+            vars[i].varValue = malloc(12 * sizeof(char));
+            sprintf(vars[i].varValue, "%d", ret);
+        }
+}
+
+void setBackgroundPid(int pid){
+    for(int i =0;i < varCount;i++)
+        if(!strcmp("!", vars[i].varName)){
+            free(vars[i].varValue);
+            //String of 12 chars should be enough for a int
+            vars[i].varValue = malloc(12 * sizeof(char));
+            sprintf(vars[i].varValue, "%d", pid);
+        }
+}
+
 int parseCmd(char* cmd, char** params){
 
     char* temp;
@@ -157,23 +190,27 @@ int parseCmd(char* cmd, char** params){
                space = false;
             else{
                 if(!quote && !space){
-                memcpy(temp, &cmd[index], offset);
-                break;
+                    memcpy(temp, &cmd[index], offset);
+                    break;
                 }
                 else if(space){
-                index++;
-                continue;
+                    index++;
+                    continue;
                 }
             }
 
             if(cmd[index+offset] == '"' || cmd[index+offset] == '\''){
                 //Open quote
                 if(!quote){
+                    //Delete the quote
+                    for(unsigned int k = index + offset;k < strlen(cmd);k++)
+                        cmd[k] = cmd[k+1];
                     quote = true;
+                    continue;
                 }
                 //Close quote :
                 else{
-                    memcpy(temp, &cmd[index+1], offset-1);
+                    memcpy(temp, &cmd[index], offset);
                     offset++;
                     break;
                 }
@@ -182,7 +219,7 @@ int parseCmd(char* cmd, char** params){
             //Backslash to indicate special character
             else if(cmd[index+offset] == '\\' && !quote){
                 //Delete the '\\' and shift everything, then skip the next character
-                for(unsigned    int k = index + offset;k < strlen(cmd);k++)
+                for(unsigned int k = index + offset;k < strlen(cmd);k++)
                     cmd[k] = cmd[k+1];
             }
 
@@ -206,16 +243,36 @@ int parseCmd(char* cmd, char** params){
     }
 
     params[i+1] = NULL;
+
+    manageShellVariables(params);
+
     return 0;
 
 }
 
 void executeCmd(char** params){
 
+    //Check if ther's a command
+    if(!params[0]){
+        printf("\n");
+        return;
+    }
+
     //Check if the command is a shell command
     if(checkForShellCommands(params) != NO_SHELL_COMMAND){
         return;
     }
+
+    //Check if we want the process as background process
+    int background = 0;
+    for(int i = 0;;i++)
+        if(!params[i+1]){
+            if(params[i][0] == '&'){
+                background = 1;
+                params[i] = NULL;
+            }
+            break;
+            }
 
     // Fork process
     pid_t pid = fork();
@@ -304,11 +361,15 @@ void executeCmd(char** params){
     else{
         // Waiting for the child process to proceed
         int child;
-        waitpid(pid, &child, 0);
+        if(background == 1)
+            setBackgroundPid(pid);
+        else{
+            waitpid(pid, &child, 0);
 
-        if(WIFEXITED(child)){
-            int status = WEXITSTATUS(child);
-            printf("\n%d", status);
+            if(WIFEXITED(child)){
+                int status = WEXITSTATUS(child);
+                setReturn(status);
+            }
         }
         return;
     }
@@ -330,7 +391,7 @@ int checkForShellCommands(char** params){
         ret = sysBuiltIn(params);
 
     if(ret != NO_SHELL_COMMAND){
-        printf("\n%d", ret);
+        setReturn(ret);
         return 0;
     }
 
@@ -477,7 +538,7 @@ int printCpuModel(){
     while(model[i] == ' ')
       i++;
     model += i;
-    
+
     printf("%s", model);
 
     fclose(f);
@@ -560,27 +621,27 @@ int printCpuNFreq(int n){
 }
 
 int setCpuFreq(char *cpu, char *freq){
-    
+
     FILE *f;
     const char *path1 = "/sys/devices/system/cpu/cpu";
     const char *path2 = "/cpufreq/scaling_setspeed";
     char path[256];
-    char nbCpu[3] = {cpu[0],cpu[1], '\0'}; 
-    
-    
+    char nbCpu[3] = {cpu[0],cpu[1], '\0'};
+
+
     strcpy(path, path1);
     strcat(path, nbCpu);
     strcat(path, path2);
-    
+
     if(!(f = fopen(path, "w"))){
         fclose(f);
         return 1;
     }
-    
+
     fprintf(f, "%s", freq);
-    
+
     fclose(f);
-    
+
     return 0;
     }
 
@@ -664,4 +725,75 @@ int setDevIpAddressMask(char** params){
 
     return 0;
 
+}
+
+ void manageShellVariables(char** params){
+
+    if(varCount == 0){
+        if(!(vars = calloc(numberOfVars , sizeof(shellVariable)))){
+            printf("Unable to allocate space for shell variables\n");
+            return;
+        }
+        varCount = 2;
+        vars[0].varName = "?";
+        vars[0].varValue = NULL;
+        vars[1].varName = "!";
+        vars[1].varValue = NULL;
+    }
+
+    if(!params[0])
+        return;
+
+    //Look for $ variable replacement
+    for(int j = 0;params[j];j++)
+        if(params[j][0] == '$'){
+            int found = 0;
+            for(int i = 0;i <varCount;i++)
+                if(!strcmp(params[j]+1, vars[i].varName)){
+                    found = 1;
+                    if(vars[i].varValue)
+                        strcpy(params[j], vars[i].varValue);
+                    else
+                        params[j] = NULL;
+                    break;
+                }
+                if(found == 0)
+                    params[j] = NULL;
+        }
+
+    //Look for variable initialization
+    char* varName = strtok(params[0], "=");
+    char* varValue = strtok(NULL, "=");
+    if(varValue){
+        int found = 0;
+        for(int i =0;i < varCount;i++)
+            if(!strcmp(varName, vars[i].varName)){
+                found = 1;
+                vars[i].varValue = varValue;
+                params[0] = NULL;
+            }
+        if(found == 0){
+            if(varCount == numberOfVars){
+                numberOfVars *= 2;
+                if(!(vars = realloc(vars,numberOfVars * sizeof(shellVariable) ))){
+                    printf("Unable to allocate more memory for the new shell variable\n");
+                    return;
+                }
+                for(int i = numberOfVars/2;i < numberOfVars;i++){
+                    vars[varCount].varName = NULL;
+                    vars[varCount].varValue = NULL;
+                }
+            }
+
+            vars[varCount].varName = malloc(sizeof(char) * (strlen(varName)+1) );
+            strcpy(vars[varCount].varName, varName);
+
+            vars[varCount].varValue = malloc(sizeof(char) * (strlen(varValue)+1));
+            strcpy(vars[varCount].varValue, varValue);
+
+            varCount++;
+            params[0] = NULL;
+        }
+    }
+    return;
 }
