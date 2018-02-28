@@ -565,7 +565,6 @@ int setCpuFreq(char *cpu, char *freq){
     
     if(!(f = fopen(path, "w"))){
         fclose(f);
-        printf("Wrong cpu numbre");
         return 1;
     }
     
