@@ -733,7 +733,7 @@ int setCpuFreq(char *cpu, char *freq){
 
 int ipBuiltIn(char** params){
 
-    if( !strcmp(params[2], "ip") && !strcmp(params[3], "addr") && params[3] != NULL){
+    if( !strcmp(params[1], "ip") && !strcmp(params[2], "addr") && params[3] != NULL){
         if(params[4] == NULL)
             return printDevIpAddressMask(params);
         if(params[6] == NULL)
@@ -752,7 +752,7 @@ int printDevIpAddressMask(char** params){
     fgets(tmp, 99, fp); // get rid of the header line
 
     while (fscanf(fp, "%s %s %s %s %s %s\n", ip, hwt, flags, hwa, mask, dev) != EOF){
-        if(strcmp(params[3], dev)){
+        if(!strcmp(params[3], dev)){
             printf("ip address : %s\n",ip);
             printf("mask : %s\n", mask);
         }
