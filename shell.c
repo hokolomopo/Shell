@@ -735,15 +735,15 @@ int ipBuiltIn(char** params){
 
     if( !strcmp(params[1], "ip") && !strcmp(params[2], "addr") && params[3] != NULL){
         if(params[4] == NULL)
-            return printDevIpAddressMask(params);
+            return DevIpAddressMask(params,1);
         if(params[6] == NULL)
-            return setDevIpAddressMask(params);
+            return DevIpAddressMask(params,0);
         }
 
     printf("sys : Invalid arguments\n");
-    return -1;
+    return 1;
 }
-
+/*
 int printDevIpAddressMask(char** params){
     FILE *fp = fopen("/proc/net/arp", "r");
 
@@ -760,16 +760,13 @@ int printDevIpAddressMask(char** params){
 
     return 0;
 }
-
-int setDevIpAddressMask(char** params){
+*/
+int DevIpAddressMask(char** params, int rw){
 
     unsigned char ip_address[15];
     unsigned char mask[15];
     int fd;
     struct ifreq ifr;
-
-    strncpy(ip_address, params[4], sizeof(ip_address));
-    strncpy(mask, params[5], sizeof(mask));
 
     //AF_INET - to define network interface IPv4
     //Creating soket for it.
@@ -780,6 +777,7 @@ int setDevIpAddressMask(char** params){
         return -1;
     }
 
+
     //AF_INET - to define IPv4 Address type.
     ifr.ifr_addr.sa_family = AF_INET;
     ifr.ifr_netmask.sa_family = AF_INET;
@@ -787,9 +785,40 @@ int setDevIpAddressMask(char** params){
     //define the ifr_name params[3] == DEV
     //port name where network attached.
     memcpy(ifr.ifr_name, params[3], IFNAMSIZ);
+    
+    //reading part
+    if(rw){
+    
+        if( (ioctl(fd, SIOCGIFADDR, &ifr) == -1) ){
+            perror("Socket (ip address):");
+            close(fd);
+            return 1;
+        }
+        
+        // print ip address 
+        printf("IP address: %s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+        
+        if( (ioctl(fd, SIOCGIFADDR, &ifr) == -1) ){
+            perror("Socket (mask):");
+            close(fd);
+            return 1;
+        }
+        
+        // print mask 
+        printf("Mask: %s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+        
+        close(fd);
+        return 0;
 
+        
+    }
+    
+    //writing part
+    
+    strncpy(ip_address, params[4], sizeof(ip_address));
+    strncpy(mask, params[5], sizeof(mask));
+    
     //defining the sockaddr_in
-
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
 
     //convert ip address in correct format to write
@@ -807,13 +836,11 @@ int setDevIpAddressMask(char** params){
     //closing fd
     close(fd);
 
-    printf("GREAT SUCCESS !!!!\n");
-
     return 0;
 
 }
 
- void manageShellVariables(char** params){
+void manageShellVariables(char** params){
 
     if(varCount == 0){
         if(!(vars = calloc(numberOfVars , sizeof(shellVariable)))){
