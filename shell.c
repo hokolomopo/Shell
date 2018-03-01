@@ -798,7 +798,7 @@ int DevIpAddressMask(char** params, int rw){
         // print ip address 
         printf("IP address: %s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
         
-        if( (ioctl(fd, SIOCGIFADDR, &ifr) == -1) ){
+        if( (ioctl(fd, SIOCGIFNETMASK, &ifr) == -1) ){
             perror("Socket (mask):");
             close(fd);
             return 1;
