@@ -113,6 +113,20 @@ int searchBeginning(FILE* f, char* begin, char* buffer);
  */
 void manageShellVariables(char **params);
 
+int sysBuiltIn(char** params);
+
+int cpuBuiltIn(char** params);
+
+int ipBuiltIn(char** params);
+
+int printCpuNFreq(int n);
+
+int setCpuFreq(char *cpu, char *freq);
+
+int devIpAddressMask(char** params, int rw);
+
+int cpuFrequencyMaxima(int maxima[2], char* path);
+
 /*
  * Set the last returned value by a process in the $? variable, and print the value
  *
@@ -575,6 +589,19 @@ int cpuBuiltIn(char** params){
     return 1;
 }
 
+int ipBuiltIn(char** params){
+
+    if( !strcmp(params[1], "ip") && !strcmp(params[2], "addr") && params[3] != NULL){
+        if(params[4] == NULL)
+            return devIpAddressMask(params,1);
+        if(params[6] == NULL)
+            return devIpAddressMask(params,0);
+        }
+
+    printf("sys : Invalid arguments\n");
+    return 1;
+}
+
 int printHostName(){
 
   char buff[255];
@@ -711,57 +738,46 @@ int setCpuFreq(char *cpu, char *freq){
     FILE *f;
     const char *path1 = "/sys/devices/system/cpu/cpu";
     const char *path2 = "/cpufreq/scaling_setspeed";
+    int maxima[2];
     char path[256];
     char nbCpu[3] = {cpu[0],cpu[1], '\0'};
+    char buff[99];
 
 
     strcpy(path, path1);
     strcat(path, nbCpu);
+    
+    if(cpuFrequencyMaxima(maxima,path) == 1)
+        return 1;
+        
+    if(!(maxima[0] <= atoi(freq) && atoi(freq) <= maxima[1])){
+        printf("Error: The input frequency is above cpu limits\n");
+        return 1;
+    }
+    
     strcat(path, path2);
 
-    if(!(f = fopen(path, "w"))){
+    if((f = fopen(path, "w")) == NULL){
+        perror("Set frequency: ");
+        return 1;
+    }
+   
+    fprintf(f, "%s", buff);
+
+    if(  !(strcmp( buff,"<unsupported>")) ){
+        printf("This architecture does not allow manual frequency settings\n");
         fclose(f);
         return 1;
     }
-
+    
     fprintf(f, "%s", freq);
 
     fclose(f);
 
     return 0;
-    }
-
-int ipBuiltIn(char** params){
-
-    if( !strcmp(params[1], "ip") && !strcmp(params[2], "addr") && params[3] != NULL){
-        if(params[4] == NULL)
-            return DevIpAddressMask(params,1);
-        if(params[6] == NULL)
-            return DevIpAddressMask(params,0);
-        }
-
-    printf("sys : Invalid arguments\n");
-    return 1;
 }
-/*
-int printDevIpAddressMask(char** params){
-    FILE *fp = fopen("/proc/net/arp", "r");
 
-    char ip[99], hwt[99], flags[99], hwa[99], mask[99], dev[99], tmp[99];
-
-    fgets(tmp, 99, fp); // get rid of the header line
-
-    while (fscanf(fp, "%s %s %s %s %s %s\n", ip, hwt, flags, hwa, mask, dev) != EOF){
-        if(!strcmp(params[3], dev)){
-            printf("ip address : %s\n",ip);
-            printf("mask : %s\n", mask);
-        }
-    }
-
-    return 0;
-}
-*/
-int DevIpAddressMask(char** params, int rw){
+int devIpAddressMask(char** params, int rw){
 
     unsigned char ip_address[15];
     unsigned char mask[15];
@@ -909,4 +925,37 @@ void manageShellVariables(char** params){
         }
     }
     return;
+}
+
+int cpuFrequencyMaxima(int maxima[2], char* path){
+    
+    FILE* f;
+    char str[99];
+    char path_min[99];
+    char path_max[99];
+    
+    strcpy(path_min,path);
+    strcat(path_min,"/cpufreq/cpuinfo_min_freq");
+    strcpy(path_max,path);
+    strcat(path_max,"/cpufreq/cpuinfo_max_freq");
+    
+    if((f = fopen(path_min, "r")) == NULL){
+        perror("Cpu min freq: ");
+        return 1;
+    }
+    
+    fscanf(f, "%s", str);
+    maxima[0] = atoi(str);
+    fclose(f);
+    
+    if((f = fopen(path_min, "r")) == NULL){
+        perror("Cpu max freq: ");
+        return 1;
+    }
+    
+    fscanf(f, "%s", str);
+    maxima[1] = atoi(str);
+    fclose(f);
+    
+    return 0;
 }
