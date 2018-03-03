@@ -461,9 +461,7 @@ void executeCmd(char** params){
     else{
         // Waiting for the child process to proceed
         int child;
-        if(background == 1)
-            setBackgroundPid(pid);
-        else{
+        if(background == 0){
             waitpid(pid, &child, 0);
 
             if(WIFEXITED(child)){
@@ -471,6 +469,8 @@ void executeCmd(char** params){
                 setReturn(status);
             }
         }
+        setBackgroundPid(pid);
+
         return;
     }
 
@@ -746,22 +746,22 @@ int setCpuFreq(char *cpu, char *freq){
 
     strcpy(path, path1);
     strcat(path, nbCpu);
-    
+
     if(cpuFrequencyMaxima(maxima,path) == 1)
         return 1;
-        
+
     if(!(maxima[0] <= atoi(freq) && atoi(freq) <= maxima[1])){
         printf("Error: The input frequency is above cpu limits\n");
         return 1;
     }
-    
+
     strcat(path, path2);
 
     if((f = fopen(path, "w")) == NULL){
         perror("Set frequency: ");
         return 1;
     }
-   
+
     fprintf(f, "%s", buff);
 
     if(  !(strcmp( buff,"<unsupported>")) ){
@@ -769,7 +769,7 @@ int setCpuFreq(char *cpu, char *freq){
         fclose(f);
         return 1;
     }
-    
+
     fprintf(f, "%s", freq);
 
     fclose(f);
@@ -801,39 +801,39 @@ int devIpAddressMask(char** params, int rw){
     //define the ifr_name params[3] == DEV
     //port name where network attached.
     memcpy(ifr.ifr_name, params[3], IFNAMSIZ);
-    
+
     //reading part
     if(rw){
-    
+
         if( (ioctl(fd, SIOCGIFADDR, &ifr) == -1) ){
             perror("Socket (ip address):");
             close(fd);
             return 1;
         }
-        
-        // print ip address 
+
+        // print ip address
         printf("IP address: %s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
-        
+
         if( (ioctl(fd, SIOCGIFNETMASK, &ifr) == -1) ){
             perror("Socket (mask):");
             close(fd);
             return 1;
         }
-        
-        // print mask 
+
+        // print mask
         printf("Mask: %s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
-        
+
         close(fd);
         return 0;
 
-        
+
     }
-    
+
     //writing part
-    
+
     strncpy(ip_address, params[4], sizeof(ip_address));
     strncpy(mask, params[5], sizeof(mask));
-    
+
     //defining the sockaddr_in
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
 
@@ -928,34 +928,34 @@ void manageShellVariables(char** params){
 }
 
 int cpuFrequencyMaxima(int maxima[2], char* path){
-    
+
     FILE* f;
     char str[99];
     char path_min[99];
     char path_max[99];
-    
+
     strcpy(path_min,path);
     strcat(path_min,"/cpufreq/cpuinfo_min_freq");
     strcpy(path_max,path);
     strcat(path_max,"/cpufreq/cpuinfo_max_freq");
-    
+
     if((f = fopen(path_min, "r")) == NULL){
         perror("Cpu min freq: ");
         return 1;
     }
-    
+
     fscanf(f, "%s", str);
     maxima[0] = atoi(str);
     fclose(f);
-    
+
     if((f = fopen(path_min, "r")) == NULL){
         perror("Cpu max freq: ");
         return 1;
     }
-    
+
     fscanf(f, "%s", str);
     maxima[1] = atoi(str);
     fclose(f);
-    
+
     return 0;
 }
