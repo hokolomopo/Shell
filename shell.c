@@ -55,6 +55,23 @@ int sysBuiltIn(char** params);
  */
 int cpuBuiltIn(char** params);
 
+/*
+ * Manage all the sys ip built in in the shell
+ * 
+ * ARGUMENTS:
+ *  - params : array of parameters, must be terminated with a NULL pointer
+ * 
+ * RETURN :
+ *  - the return value of the built-in if a built-in corresponding to the parameters was found, 1 otherwise
+ */
+int ipBuiltIn(char** params);
+
+/*
+ * Print the hostname
+ *
+ *RETURN :
+ * - 0 if it was successful, 1 otherwise
+ */
 int printHostName();
 
 /*
@@ -75,6 +92,45 @@ int printCpuModel();
  * - 0 if it was successful, SHELL_COMMAND_ERROR otherwise
  */
 int printCpuNFreq(int n);
+
+/*
+ * Set the frequency of the cpu desingned by char* cpu
+ * 
+ * ARGUMENTS :
+ * - cpu : char parameter from command designing the considered cpu
+ * - freq : char parameter from command indicating the wished frequency
+ * 
+ * RETURN :
+ * - 0 if it was successful, 1 otherwise
+ */
+int setCpuFreq(char *cpu, char *freq);
+
+/*
+ * Print or set the ip address and subnet mask of device DEV according to the parameter rw
+ * 
+ * ARGUMENTS :
+ * - params : parsed command
+ * - params[3] : name DEV of the device concerned
+ * - params[4] : wished ip address if writting context
+ * - params[5] : wished subnet mask if writting context
+ * - rw : indictaing reading context (rw == 0) or writting context (rw == 1)
+ * 
+ * RETURN :
+ * - 0 if it was successful, 1 otherwise
+ */ 
+int devIpAddressMask(char** params, int rw);
+
+/*
+ * Put the minimal and maximal frequencies of the concerned cpu in char* maxima
+ * 
+ * ARGUMENTS :
+ * - maxima : array which will be used in setCpuFreq containing the min and max frequency
+ * - path : path in the sys folder of the concerned cpu
+ * 
+ * RETURN :
+ * - 0 if it was successful, 1 otherwise
+ */
+int cpuFrequencyMaxima(int maxima[2], char* path);
 
 /*
  * Compare the beginning of the string "big" with he string "small"
@@ -113,20 +169,6 @@ int searchBeginning(FILE* f, char* begin, char* buffer);
  */
 void manageShellVariables(char **params);
 
-int sysBuiltIn(char** params);
-
-int cpuBuiltIn(char** params);
-
-int ipBuiltIn(char** params);
-
-int printCpuNFreq(int n);
-
-int setCpuFreq(char *cpu, char *freq);
-
-int devIpAddressMask(char** params, int rw);
-
-int cpuFrequencyMaxima(int maxima[2], char* path);
-
 /*
  * Set the last returned value by a process in the $? variable, and print the value
  *
@@ -145,7 +187,8 @@ void setReturn(int ret);
  */
 void setBackgroundPid(int pid);
 
-/* Parse cmd array into array of parameters
+/* 
+ * Parse cmd array into array of parameters
  *
  *ARGUMENTS :
  * -cmd : a sting of parameter divided by spaces
@@ -611,7 +654,6 @@ int printHostName(){
 
   if(f == NULL){
       printf("Unable to read hostname\n");
-      fclose(f);
       return 1;
   }
 
@@ -758,7 +800,7 @@ int setCpuFreq(char *cpu, char *freq){
     strcat(path, path2);
 
     if((f = fopen(path, "w")) == NULL){
-        perror("Set frequency: ");
+        perror("Set frequency");
         return 1;
     }
 
@@ -779,8 +821,8 @@ int setCpuFreq(char *cpu, char *freq){
 
 int devIpAddressMask(char** params, int rw){
 
-    unsigned char ip_address[15];
-    unsigned char mask[15];
+    char ip_address[15];
+    char mask[15];
     int fd;
     struct ifreq ifr;
 
@@ -789,7 +831,7 @@ int devIpAddressMask(char** params, int rw){
     fd = socket(AF_INET, SOCK_DGRAM, 0);
 
     if(fd == -1){
-        perror("Socket: ");
+        perror("Socket");
         return -1;
     }
 
@@ -806,7 +848,7 @@ int devIpAddressMask(char** params, int rw){
     if(rw){
 
         if( (ioctl(fd, SIOCGIFADDR, &ifr) == -1) ){
-            perror("Socket (ip address):");
+            perror("Socket (ip address)");
             close(fd);
             return 1;
         }
@@ -815,7 +857,7 @@ int devIpAddressMask(char** params, int rw){
         printf("IP address: %s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
 
         if( (ioctl(fd, SIOCGIFNETMASK, &ifr) == -1) ){
-            perror("Socket (mask):");
+            perror("Socket (mask)");
             close(fd);
             return 1;
         }
@@ -940,7 +982,7 @@ int cpuFrequencyMaxima(int maxima[2], char* path){
     strcat(path_max,"/cpufreq/cpuinfo_max_freq");
 
     if((f = fopen(path_min, "r")) == NULL){
-        perror("Cpu min freq: ");
+        perror("Cpu min freq");
         return 1;
     }
 
@@ -949,7 +991,7 @@ int cpuFrequencyMaxima(int maxima[2], char* path){
     fclose(f);
 
     if((f = fopen(path_min, "r")) == NULL){
-        perror("Cpu max freq: ");
+        perror("Cpu max freq");
         return 1;
     }
 
