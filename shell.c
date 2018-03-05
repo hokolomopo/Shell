@@ -57,10 +57,10 @@ int cpuBuiltIn(char** params);
 
 /*
  * Manage all the sys ip built in in the shell
- * 
+ *
  * ARGUMENTS:
  *  - params : array of parameters, must be terminated with a NULL pointer
- * 
+ *
  * RETURN :
  *  - the return value of the built-in if a built-in corresponding to the parameters was found, 1 otherwise
  */
@@ -95,11 +95,11 @@ int printCpuNFreq(int n);
 
 /*
  * Set the frequency of the cpu desingned by char* cpu
- * 
+ *
  * ARGUMENTS :
  * - cpu : char parameter from command designing the considered cpu
  * - freq : char parameter from command indicating the wished frequency
- * 
+ *
  * RETURN :
  * - 0 if it was successful, 1 otherwise
  */
@@ -107,26 +107,26 @@ int setCpuFreq(char *cpu, char *freq);
 
 /*
  * Print or set the ip address and subnet mask of device DEV according to the parameter rw
- * 
+ *
  * ARGUMENTS :
  * - params : parsed command
  * - params[3] : name DEV of the device concerned
  * - params[4] : wished ip address if writting context
  * - params[5] : wished subnet mask if writting context
  * - rw : indictaing reading context (rw == 0) or writting context (rw == 1)
- * 
+ *
  * RETURN :
  * - 0 if it was successful, 1 otherwise
- */ 
+ */
 int devIpAddressMask(char** params, int rw);
 
 /*
  * Put the minimal and maximal frequencies of the concerned cpu in char* maxima
- * 
+ *
  * ARGUMENTS :
  * - maxima : array which will be used in setCpuFreq containing the min and max frequency
  * - path : path in the sys folder of the concerned cpu
- * 
+ *
  * RETURN :
  * - 0 if it was successful, 1 otherwise
  */
@@ -187,7 +187,7 @@ void setReturn(int ret);
  */
 void setBackgroundPid(int pid);
 
-/* 
+/*
  * Parse cmd array into array of parameters
  *
  *ARGUMENTS :
@@ -232,10 +232,24 @@ int changeDirectory(char* dir);
  */
 int checkForShellCommands(char** params);
 
+int manageVarsReplacement(char* cmd);
+
 int main(){
 
     char cmd[MAX_COMMAND_LINE_LENGHT];
     char* params[MAX_ARGUMENTS + 1]; //(plus 1 for the \0 char)
+
+    //Initialize ! and ? variables
+    if(!(vars = calloc(numberOfVars , sizeof(shellVariable)))){
+        printf("Unable to allocate space for shell variables\n");
+        return 0;
+    }
+
+    varCount = 2;
+    vars[0].varName = "?";
+    vars[0].varValue = NULL;
+    vars[1].varName = "!";
+    vars[1].varValue = NULL;
 
     while(1){
 
@@ -256,6 +270,9 @@ int main(){
         if(strlen(cmd) == 0)
             continue;
 
+        if(manageVarsReplacement(cmd))
+            continue;
+
         // Parse cmd array into array of parameters
         if(parseCmd(cmd, params) == 1)
             continue;
@@ -268,6 +285,55 @@ int main(){
         for(int i = 0; params[i] ;i++)
             free(params[i]);
 
+    }
+
+    return 0;
+}
+
+int manageVarsReplacement(char* cmd){
+
+    //Search for $ symbols in cmd
+    for(int k = 0;cmd[k] != '\0';k++){
+        if(cmd[k] == '$' && cmd[k+1] != '\0'){
+            //If the special character \ is used, ignore the $ symbol
+            if(k >= 1 && cmd[k-1] == '\\')
+                continue;
+
+            //Find the lenght of the $ variable
+            int lenght = 0;
+            for(int i = k+1;cmd[i] != '\0' && cmd[i] != ' ' && cmd[i] != '/';i++)
+                lenght++;
+
+            //Copy the name of the variable in varNAme
+            char varName[lenght+1];
+            strncpy(varName, cmd + k+1, lenght);
+            varName[lenght] = '\0';
+
+            //Cut cmd to delete the variable name
+            char tmp[MAX_COMMAND_LINE_LENGHT];
+            strcpy(tmp, cmd);
+            cmd[k] = '\0';
+            strcat(cmd, tmp + k + 1 + lenght);
+
+            //Search for a existing variable by the name varName
+            for(int i = 0;i < varCount;i++)
+                if(!strcmp(varName, vars[i].varName)){
+                    if(vars[i].varValue){
+                        //Error if we want to insert something too big
+                        if(strlen(cmd) + strlen(vars[i].varValue) >= MAX_COMMAND_LINE_LENGHT){
+                            printf("ERROR: %s\n", strerror(E2BIG));
+                            return 1;
+                        }
+
+                        //Insert the variable value in cmd
+                        strcpy(tmp, cmd);
+                        cmd[k] = '\0';
+                        strcat(cmd, vars[i].varValue);
+                        strcat(cmd, tmp +k);
+                        break;
+                    }
+                }
+        }
     }
 
     return 0;
@@ -911,37 +977,8 @@ int devIpAddressMask(char** params, int rw){
 
 void manageShellVariables(char** params){
 
-    if(varCount == 0){
-        if(!(vars = calloc(numberOfVars , sizeof(shellVariable)))){
-            printf("Unable to allocate space for shell variables\n");
-            return;
-        }
-        varCount = 2;
-        vars[0].varName = "?";
-        vars[0].varValue = NULL;
-        vars[1].varName = "!";
-        vars[1].varValue = NULL;
-    }
-
     if(!params[0])
         return;
-
-    //Look for $ variable replacement
-    for(int j = 0;params[j];j++)
-        if(params[j][0] == '$'){
-            int found = 0;
-            for(int i = 0;i <varCount;i++)
-                if(!strcmp(params[j]+1, vars[i].varName)){
-                    found = 1;
-                    if(vars[i].varValue)
-                        strcpy(params[j], vars[i].varValue);
-                    else
-                        params[j] = NULL;
-                    break;
-                }
-                if(found == 0)
-                    params[j] = NULL;
-        }
 
     //Look for variable initialization
     char* varName = strtok(params[0], "=");
@@ -951,7 +988,9 @@ void manageShellVariables(char** params){
         for(int i =0;i < varCount;i++)
             if(!strcmp(varName, vars[i].varName)){
                 found = 1;
-                vars[i].varValue = varValue;
+                free(vars[i].varValue);
+                vars[i].varValue = malloc(sizeof(char) * (strlen(varValue)+1));
+                strcpy(vars[i].varValue, varValue);
                 params[0] = NULL;
             }
         if(found == 0){
