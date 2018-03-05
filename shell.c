@@ -160,8 +160,7 @@ int strcmpbeginning(const char* big, const char* small);
 int searchBeginning(FILE* f, char* begin, char* buffer);
 
 /*
- * Replace the strings beginning by $in the array param by their shell variable value
- *  and create a create/update a shell variable if param[0] has the format "varName=varValue"
+ *  Create or update a shell variable if param[0] has the format "varName=varValue"
  *
  *ARGUMENTS :
  * - params : an array of string, must be terminated with a NULL pointer
@@ -169,6 +168,16 @@ int searchBeginning(FILE* f, char* begin, char* buffer);
  */
 void manageShellVariables(char **params);
 
+/*
+ *  Replace in the cmd string shell $variables with their value
+ *
+ *ARGUMENTS :
+ * - cmd : the string in which to replace the $ variables
+ *
+ *RETURN :
+ * - 0 if successful, 1 if a problem arose
+ */
+int manageVarsReplacement(char* cmd);
 /*
  * Set the last returned value by a process in the $? variable, and print the value
  *
@@ -231,8 +240,6 @@ int changeDirectory(char* dir);
  * - 0 if a shell command was found, NO_SHELL_COMMAND otherwise
  */
 int checkForShellCommands(char** params);
-
-int manageVarsReplacement(char* cmd);
 
 int main(){
 
@@ -611,14 +618,18 @@ int changeDirectory(char* dir){
 
     char* to;
 
-    if(!dir)
-        return SHELL_COMMAND_ERROR;
+    if(!dir){
+        char* tmp = getenv("HOME");
+        to = malloc(strlen(tmp) * sizeof(char));
+        strcpy(to, tmp);
+    }
 
     //Absolute path
     else if(dir[0] == '/'){
         to = (char*)malloc(strlen(dir) * sizeof(1));
         to = strcpy(to, dir);
     }
+
     //Relative path
     else{
         int size = 50;
