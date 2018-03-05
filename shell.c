@@ -886,6 +886,7 @@ int devIpAddressMask(char** params, int rw){
     //Setting the Ip Address using ioctl
     if( ioctl(fd, SIOCSIFADDR, &ifr) == -1){
         perror("Ip setting");
+        printf("A sudo permission is required\n");
         close(fd);
         return 1;
     }
@@ -896,6 +897,7 @@ int devIpAddressMask(char** params, int rw){
     //Setting the mask using ioctl
     if( ioctl(fd, SIOCSIFNETMASK, &ifr) == -1){
         perror("Mask setting:");
+        printf("A sudo permission is required\n");
         close(fd);
         return 1;
     }
