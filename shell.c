@@ -878,18 +878,25 @@ int devIpAddressMask(char** params, int rw){
 
     //defining the sockaddr_in
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
+    struct sockaddr_in *netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
 
     //convert ip address in correct format to write
     inet_pton(AF_INET, ip_address, &addr->sin_addr);
 
     //Setting the Ip Address using ioctl
-    ioctl(fd, SIOCSIFADDR, &ifr);
+    if( ioctl(fd, SIOCSIFADDR, &ifr) == -1){
+        perror("Ip setting");
+        return 1;
+    }
 
     //convert mask in correct format to write
-    inet_pton(AF_INET, mask, &addr->sin_addr);
+    inet_pton(AF_INET, mask, &netmask->sin_addr);
 
     //Setting the mask using ioctl
-    ioctl(fd, SIOCSIFNETMASK, &ifr);
+    if( ioctl(fd, SIOCSIFNETMASK, &ifr) == -1){
+        perror("Mask setting:");
+        return 1;
+    }
 
     //closing fd
     close(fd);
