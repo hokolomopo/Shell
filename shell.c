@@ -879,10 +879,13 @@ int setCpuFreq(char *cpu, char *freq){
     if(cpuFrequencyMaxima(maxima,path) == 1)
         return 1;
 
-    if(!(maxima[0] <= atoi(freq) && atoi(freq) <= maxima[1])){
-        printf("%s %d %d %d\n", freq, atoi(freq), maxima[0], maxima[1]);
-        printf("Error: The input frequency is above cpu limits\n");
+    if(maxima[0] > atoi(freq)){
+        printf("Error: The input frequency is below cpu limits\n");
         return 1;
+    }
+    else if(atoi(freq) > maxima[1]){
+      printf("Error: The input frequency is above cpu limits\n");
+      return 1;
     }
 
     strcat(path, path2);
