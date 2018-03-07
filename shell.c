@@ -838,7 +838,17 @@ int printCpuNFreq(int n){
                 return 1;
             }
 
-            printf("%s ", buff);
+            //Take only the cpu freq
+            strtok(buff, ":");
+            char* freq = strtok(NULL, ":");
+
+            //Delete eventual spaces at the start of the string
+            int i = 0;
+            while(freq[i] == ' ')
+              i++;
+            freq += i;
+
+            printf("%s ", freq);
             break;
         }
         else if(number > n){
@@ -870,18 +880,19 @@ int setCpuFreq(char *cpu, char *freq){
         return 1;
 
     if(!(maxima[0] <= atoi(freq) && atoi(freq) <= maxima[1])){
+        printf("%s %d %d %d\n", freq, atoi(freq), maxima[0], maxima[1]);
         printf("Error: The input frequency is above cpu limits\n");
         return 1;
     }
 
     strcat(path, path2);
 
-    if((f = fopen(path, "w")) == NULL){
+    if((f = fopen(path, "r")) == NULL){
         perror("Set frequency");
         return 1;
     }
 
-    fprintf(f, "%s", buff);
+    fscanf(f, "%s", buff);
 
     if(  !(strcmp( buff,"<unsupported>")) ){
         printf("This architecture does not allow manual frequency settings\n");
@@ -1051,7 +1062,7 @@ int cpuFrequencyMaxima(int maxima[2], char* path){
     maxima[0] = atoi(str);
     fclose(f);
 
-    if((f = fopen(path_min, "r")) == NULL){
+    if((f = fopen(path_max, "r")) == NULL){
         perror("Cpu max freq");
         return 1;
     }
