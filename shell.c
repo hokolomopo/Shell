@@ -165,6 +165,9 @@ int searchBeginning(FILE* f, char* begin, char* buffer);
  *ARGUMENTS :
  * - params : an array of string, must be terminated with a NULL pointer
  *
+ *RETURN :
+ * - 0 if a assignement was detected and done, 1 if no assignement was found,
+ *    -1 if an error occured
  */
 int manageShellVariables(char **params);
 
