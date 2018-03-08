@@ -166,7 +166,7 @@ int searchBeginning(FILE* f, char* begin, char* buffer);
  * - params : an array of string, must be terminated with a NULL pointer
  *
  */
-void manageShellVariables(char **params);
+int manageShellVariables(char **params);
 
 /*
  *  Replace in the cmd string shell $variables with their value
@@ -460,8 +460,6 @@ int parseCmd(char* cmd, char** params){
 
     params[i+1] = NULL;
 
-    manageShellVariables(params);
-
     return 0;
 
 }
@@ -473,6 +471,14 @@ void executeCmd(char** params){
         printf("\n");
         return;
     }
+
+    //Check if it's a variable assignement
+    int x;
+    if((x = manageShellVariables(params)) != 1){
+      setReturn(x);
+      return;
+    }
+
 
     //Check if the command is a shell command
     if(checkForShellCommands(params) != NO_SHELL_COMMAND){
@@ -1000,10 +1006,10 @@ int devIpAddressMask(char** params, int rw){
 
 }
 
-void manageShellVariables(char** params){
+int manageShellVariables(char** params){
 
     if(!params[0])
-        return;
+        return 1;
 
     //Look for variable initialization
     char* varName = strtok(params[0], "=");
@@ -1023,7 +1029,7 @@ void manageShellVariables(char** params){
                 numberOfVars *= 2;
                 if(!(vars = realloc(vars,numberOfVars * sizeof(shellVariable) ))){
                     printf("Unable to allocate more memory for the new shell variable\n");
-                    return;
+                    return -1;
                 }
                 for(int i = numberOfVars/2;i < numberOfVars;i++){
                     vars[varCount].varName = NULL;
@@ -1041,7 +1047,8 @@ void manageShellVariables(char** params){
             params[0] = NULL;
         }
     }
-    return;
+    else return 1;
+    return 0;
 }
 
 int cpuFrequencyMaxima(int maxima[2], char* path){
