@@ -1,10 +1,10 @@
  
 int stack_low => arch/x86/mm/fault.c between lines 1224/1225
 
-int copy-on-write => somewhere in mm/memory.c between lines 3350/3351
+int copy-on-write => somewhere in mm/memory.c between lines 3350/3351 (A : 3168/3169)
 
 int anonymous_fault => mm/memory.c between lines 3331/3332
 
 int swapped_back => mm/memory.c between lines 3337/3338
 
-int 
+int transparent_hugepage_fault => mm/memory.c between lines 3383/3384
