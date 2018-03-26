@@ -1,7 +1,7 @@
  
 int stack_low => arch/x86/mm/fault.c between lines 1224/1225
 
-int copy-on-write => somewhere in mm/memory.c between lines 3350/3351 (A : 3168/3169)
+int copy-on-write => mm/memory.c between lines 3350/3351 (A : 3168/3169)
 
 int anonymous_fault => mm/memory.c between lines 3331/3332
 
