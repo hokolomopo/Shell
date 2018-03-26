@@ -1,0 +1,4 @@
+ 
+int stack_low => arch/x86/mm/fault.c between line 1224/1225
+
+int copy-on-write => somewhere in mm/memory.c to the handle_pte_fault() function
