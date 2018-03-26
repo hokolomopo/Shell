@@ -1,4 +1,10 @@
  
-int stack_low => arch/x86/mm/fault.c between line 1224/1225
+int stack_low => arch/x86/mm/fault.c between lines 1224/1225
 
-int copy-on-write => somewhere in mm/memory.c to the handle_pte_fault() function
+int copy-on-write => somewhere in mm/memory.c between lines 3350/3351
+
+int anonymous_fault => mm/memory.c between lines 3331/3332
+
+int swapped_back => mm/memory.c between lines 3337/3338
+
+int 
