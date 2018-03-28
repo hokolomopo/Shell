@@ -30,3 +30,5 @@ after each page fault (anonymous, cow, file, swap)
 
 init task_struct ==> kernel/fork.c function copy_process (every process is a fork)
 do it lne 1427 ? (after page_fault_disabled)
+
+free struct : kernel/exit.c do_exit()
