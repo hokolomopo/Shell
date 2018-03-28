@@ -1,5 +1,4 @@
 # Simple Shell
 
-Simple shell creation for the course Operating System at ULG.
-
-https://www.programmes.uliege.be/cocoon/20172018/cours/INFO0940-1.html
+This branch is a shell created for a custom version of linux where we defined our own system call.
+Some functionalities may not work on another OS.

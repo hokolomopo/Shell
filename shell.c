@@ -1,3 +1,7 @@
+#define __USE_MISC 1
+#define _GNU_SOURCE 1
+
+#include <sys/syscall.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,9 +12,10 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
-#define __USE_MISC 1
+
 #include <net/if.h>
 #include <arpa/inet.h>
+
 
 #define MAX_ARGUMENTS 255
 #define MAX_ARGUMENTS_CARACTERS 255
@@ -29,6 +34,16 @@ typedef struct{
     char* varName;
     char* varValue;
 }shellVariable;
+
+struct pfstat {
+	int stack_low; //Number of times the stack was expanded after a page fault
+	int transparent_hugepage_fault; //Number of huge page transparent PMD fault
+	int anonymous_fault; //Normal anonymous page fault
+	int file_fault; //Normal file-backed page fault
+	int swapped_back; //Number of fault that produced a read-from swap to put
+	int copy_on_write; //Number of fault which backed a copy-on-write;
+	int fault_alloced_page; //Number of normal pages allocated due to a page
+};
 
 static int numberOfVars = 10;
 static shellVariable* vars;
@@ -55,6 +70,17 @@ int sysBuiltIn(char** params);
  * - the return value of the built-in if a built-in corresponding to the parameters was found, 1 otherwise
  */
 int cpuBuiltIn(char** params);
+
+/*
+ * Manage the pfstat build in
+ *
+ *ARGUMENTS :
+ * - params : an array of parameters, must be terminated with a NULL pointer
+ *
+ *RETURN :
+ * - the return value of the system call sys_pfstats
+ */
+int pfstatBuiltIn(char** params);
 
 /*
  * Manage all the sys ip built in in the shell
@@ -693,6 +719,9 @@ int sysBuiltIn(char** params){
         return cpuBuiltIn(params);
     else if(!strcmp(params[1], "ip"))
         return ipBuiltIn(params);
+    else if(!strcmp(params[1], "pfstat"))
+        return pfstatBuiltIn(params);
+
 
     printf("%s: no such command for sys\n", params[1]);
     return 1;
@@ -701,7 +730,7 @@ int sysBuiltIn(char** params){
 int cpuBuiltIn(char** params){
 
     if(!params[2]){
-        printf("sys cpu: not enough aruments\n");
+        printf("sys cpu: not enough arugments\n");
         return 1;
     }
 
@@ -732,6 +761,42 @@ int ipBuiltIn(char** params){
 
     printf("sys : Invalid arguments\n");
     return 1;
+}
+
+int pfstatBuiltIn(char** params){
+
+    if(!params[2]){
+        printf("sys pfstat: not enough arugments\n");
+        return 1;
+    }
+
+
+    struct pfstat* stats = malloc(sizeof(struct pfstat));
+    int pid = atoi(params[2]);
+
+    int err = syscall(377,pid , stats);
+
+    if(err){
+      if(err == 1){
+        printf("Error : pid not valid\n");
+      }
+      if(err == 2){
+        printf("Error : pointer not valid\n");
+      }
+      free(stats);
+      return 1;
+    }
+
+    printf("stack_low %d\n", stats->stack_low);
+    printf("transparent_hugepage_fault %d\n", stats->transparent_hugepage_fault);
+    printf("anonymous_fault %d\n", stats->anonymous_fault);
+    printf("file_fault %d\n", stats->file_fault);
+    printf("swapped_back %d\n", stats->swapped_back);
+    printf("copy_on_write %d\n", stats->copy_on_write);
+    printf("fault_alloced_page %d\n", stats->fault_alloced_page);
+
+    free(stats);
+    return 0;
 }
 
 int printHostName(){
