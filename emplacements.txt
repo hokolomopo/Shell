@@ -1,0 +1,34 @@
+ TODO ?
+ verify the given pid, maybe not authorize pfstat on every single process (maybe process protected, like init)
+ 
+int stack_low => arch/x86/mm/fault.c between lines 1224/1225
+function : expand_stack, used a bit everywhere
+
+int copy-on-write => mm/memory.c between lines 3350/3351 (A : 3168/3169)
+function : do_wp_page,static, called twice : -once in general handler
+                                             -one in do_swap_apge (probably still a fault?)
+
+int anonymous_fault => mm/memory.c between lines 3331/3332
+function : do_anonymous_page, static, called only once in mm/memory.c for a fault
+
+not sure but by process of elimination (next to evero ohter fault) and lloks like what's sais on this link : 
+http://www.chudov.com/tmp/LinuxVM/html/understand/node35.html#SECTION00962000000000000000
+int file_fault => mm/memory.c between lines 3334/3335
+function : do_fault, static, called only once in mm/memory.c for a fault
+
+int swapped_back => mm/memory.c between lines 3337/3338
+function : do_swap_page, static, called only once in mm/memory.c for a fault
+
+int transparent_hugepage_fault => mm/memory.c between lines 3387/3388
+function : hugetlb_fault
+probably mm/memory.c line 3398/3399 actally (other one looks like non-TRANSPARENT hugepage) 
+function : create_huge_pmd
+
+int fault_alloced_page ==> probably m/memory.c between lines 3396/3397 (after allocating mem)
+OR
+after each page fault (anonymous, cow, file, swap)
+
+init task_struct ==> kernel/fork.c function copy_process (every process is a fork)
+do it lne 1427 ? (after page_fault_disabled)
+
+free struct : kernel/exit.c do_exit()
