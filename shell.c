@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#define __USE_MISC 1
 #include <net/if.h>
 #include <arpa/inet.h>
 
@@ -594,7 +595,9 @@ void executeCmd(char** params){
                 setReturn(status);
             }
         }
-        setBackgroundPid(pid);
+        else{
+          setBackgroundPid(pid);
+        }
 
         return;
     }
