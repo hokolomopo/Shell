@@ -1,3 +1,3 @@
 
 shell: shell.c
-	gcc shell.c -Wall -Wextra -o shell
+	gcc shell.c -Wall -Wextra -std=c99 -o shell
