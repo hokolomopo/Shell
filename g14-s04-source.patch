@@ -1,0 +1,322 @@
+diff --git a/arch/x86/entry/syscalls/syscall_32.tbl b/arch/x86/entry/syscalls/syscall_32.tbl
+index e62f440..5819079 100644
+--- a/arch/x86/entry/syscalls/syscall_32.tbl
++++ b/arch/x86/entry/syscalls/syscall_32.tbl
+@@ -383,3 +383,4 @@
+ 374	i386	userfaultfd		sys_userfaultfd
+ 375	i386	membarrier		sys_membarrier
+ 376	i386	mlock2			sys_mlock2
++377 i386  pfstat    sys_pfstat
+diff --git a/include/linux/init_task.h b/include/linux/init_task.h
+index 1c1ff7e..fa6c785 100644
+--- a/include/linux/init_task.h
++++ b/include/linux/init_task.h
+@@ -191,6 +191,7 @@ extern struct task_group root_task_group;
+ {									\
+ 	.state		= 0,						\
+ 	.stack		= &init_thread_info,				\
++	.pfstats    = NULL,				\
+ 	.usage		= ATOMIC_INIT(2),				\
+ 	.flags		= PF_KTHREAD,					\
+ 	.prio		= MAX_PRIO-20,					\
+diff --git a/include/linux/pfstat.h b/include/linux/pfstat.h
+new file mode 100644
+index 0000000..81aeb35
+--- /dev/null
++++ b/include/linux/pfstat.h
+@@ -0,0 +1,27 @@
++#ifndef PFSTAT
++#define PFSTAT
++
++
++enum pfstat_field{
++  PFSTSAT_STACK_LOW,
++  PFSTSAT_TRANSPARENT_HUGEMAGE,
++  PFSTSAT_ANONYMOUS_FAULT,
++  PFSTSAT_FILE_FAULT,
++  PFSTSAT_SWAPPED_BACK,
++  PFSTSAT_COW,
++  PFSTSAT_ALLOCED_PAGES
++};
++
++struct pfstat {
++	int stack_low; //Number of times the stack was expanded after a page fault
++	int transparent_hugepage_fault; //Number of huge page transparent PMD fault
++	int anonymous_fault; //Normal anonymous page fault
++	int file_fault; //Normal file-backed page fault
++	int swapped_back; //Number of fault that produced a read-from swap to put
++	int copy_on_write; //Number of fault which backed a copy-on-write;
++	int fault_alloced_page; //Number of normal pages allocated due to a page
++};
++
++void update_pfstat(enum pfstat_field field);
++
++#endif /* PFSTAT */
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index ce0f61d..c690a7f 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -62,6 +62,8 @@ struct sched_param {
+ 
+ #include <asm/processor.h>
+ 
++#include <linux/pfstat.h>
++
+ #define SCHED_ATTR_SIZE_VER0	48	/* sizeof first published struct */
+ 
+ /*
+@@ -1384,6 +1386,8 @@ struct task_struct {
+ 	unsigned int flags;	/* per process flags, defined below */
+ 	unsigned int ptrace;
+ 
++	struct pfstat *pfstats;
++
+ #ifdef CONFIG_SMP
+ 	struct llist_node wake_entry;
+ 	int on_cpu;
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index c2b66a2..6a9ee5d 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -889,4 +889,6 @@ asmlinkage long sys_membarrier(int cmd, int flags);
+ 
+ asmlinkage long sys_mlock2(unsigned long start, size_t len, int flags);
+ 
++asmlinkage long sys_pfstat(pid_t pid, struct pfstat* pfstats);
++
+ #endif
+diff --git a/init/main.c b/init/main.c
+index 9e64d70..1ad5d94 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -460,6 +460,7 @@ static void __init boot_cpu_init(void)
+ {
+ 	int cpu = smp_processor_id();
+ 	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
++	printk("Hello INFO0940!");
+ 	set_cpu_online(cpu, true);
+ 	set_cpu_active(cpu, true);
+ 	set_cpu_present(cpu, true);
+diff --git a/kernel/exit.c b/kernel/exit.c
+index ffba5df..53dd80a 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -738,6 +738,8 @@ void do_exit(long code)
+ 		acct_process();
+ 	trace_sched_process_exit(tsk);
+ 
++	kfree(tsk->pfstats);
++
+ 	exit_sem(tsk);
+ 	exit_shm(tsk);
+ 	exit_files(tsk);
+diff --git a/kernel/fork.c b/kernel/fork.c
+index 2e55b53..0b4ecc2 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1424,6 +1424,8 @@ static struct task_struct *copy_process(unsigned long clone_flags,
+ #endif
+ 
+ 	p->pagefault_disabled = 0;
++	p->pfstats = NULL;
++
+ 
+ #ifdef CONFIG_LOCKDEP
+ 	p->lockdep_depth = 0; /* no locks held yet */
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 78947de..e17d746 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -57,6 +57,8 @@
+ /* Move somewhere else to avoid recompiling? */
+ #include <generated/utsrelease.h>
+ 
++#include <linux/pfstat.h>
++
+ #include <asm/uaccess.h>
+ #include <asm/io.h>
+ #include <asm/unistd.h>
+@@ -2429,3 +2431,74 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
+ 	return 0;
+ }
+ #endif /* CONFIG_COMPAT */
++
++SYSCALL_DEFINE2(pfstat, pid_t, pid, struct pfstat*, usr_stats){
++	struct task_struct* task;
++
++	printk("[PFSTAT] Syscall entered! \n");
++
++	task = find_task_by_vpid(pid);
++
++	if(!task){
++		printk("[PFSTAT] Error : Not valid PID\n");
++		return 1;
++	}
++
++	//Init pfstat struct
++	if(!task->pfstats){
++		printk("[PFSTAT] Process %s is now in PFSTAT mode\n", task->comm);
++
++		task->pfstats = (struct pfstat*)(kmalloc(sizeof(struct pfstat), GFP_KERNEL));
++		if(!task->pfstats){
++			printk("[PFSTAT] Error :Error allocing the kernel struct \n");
++			return 3;
++		}
++	}
++	//Return stats
++	else{
++		if(copy_to_user(usr_stats, task->pfstats, sizeof(struct pfstat))){
++			printk("[PFSTAT] Error : Pointer not valid\n");
++			return 2;
++		}
++	}
++
++	task->pfstats->stack_low = 0;
++	task->pfstats->transparent_hugepage_fault = 0;
++	task->pfstats->anonymous_fault = 0;
++	task->pfstats->file_fault = 0;
++	task->pfstats->swapped_back = 0;
++	task->pfstats->copy_on_write = 0;
++	task->pfstats->fault_alloced_page = 0;
++
++	return 0;
++}
++
++void update_pfstat(enum pfstat_field field){
++
++	if(!current->pfstats)
++		return;
++
++	switch(field){
++		case PFSTSAT_STACK_LOW :
++			current->pfstats->stack_low++;
++			break;
++		case PFSTSAT_TRANSPARENT_HUGEMAGE :
++			current->pfstats->transparent_hugepage_fault++;
++			break;
++		case PFSTSAT_ANONYMOUS_FAULT :
++			current->pfstats->anonymous_fault++;
++			break;
++		case PFSTSAT_FILE_FAULT :
++			current->pfstats->file_fault++;
++			break;
++		case PFSTSAT_SWAPPED_BACK :
++			current->pfstats->swapped_back++;
++			break;
++		case PFSTSAT_COW :
++			current->pfstats->copy_on_write++;
++			break;
++		case PFSTSAT_ALLOCED_PAGES :
++			current->pfstats->fault_alloced_page++;
++			break;
++	}
++}
+diff --git a/mm/filemap.c b/mm/filemap.c
+index c33c31d..583a329 100644
+--- a/mm/filemap.c
++++ b/mm/filemap.c
+@@ -1952,6 +1952,8 @@ int filemap_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ 	loff_t size;
+ 	int ret = 0;
+ 
++  update_pfstat(PFSTSAT_FILE_FAULT);
++
+ 	size = round_up(i_size_read(inode), PAGE_CACHE_SIZE);
+ 	if (offset >= size >> PAGE_CACHE_SHIFT)
+ 		return VM_FAULT_SIGBUS;
+diff --git a/mm/memory.c b/mm/memory.c
+index 76dcee3..2548da6 100644
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -2213,6 +2213,9 @@ static int wp_page_copy(struct mm_struct *mm, struct vm_area_struct *vma,
+ 		}
+ 		page_cache_release(old_page);
+ 	}
++
++	update_pfstat(PFSTSAT_COW);
++
+ 	return page_copied ? VM_FAULT_WRITE : 0;
+ oom_free_new:
+ 	page_cache_release(new_page);
+@@ -2496,6 +2499,8 @@ static int do_swap_page(struct mm_struct *mm, struct vm_area_struct *vma,
+ 	int exclusive = 0;
+ 	int ret = 0;
+ 
++	update_pfstat(PFSTSAT_SWAPPED_BACK);
++
+ 	if (!pte_unmap_same(mm, pmd, page_table, orig_pte))
+ 		goto out;
+ 
+@@ -2711,6 +2716,8 @@ static int do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
+ 
+ 	pte_unmap(page_table);
+ 
++	update_pfstat(PFSTSAT_ANONYMOUS_FAULT);
++
+ 	/* File mapping without ->vm_ops ? */
+ 	if (vma->vm_flags & VM_SHARED)
+ 		return VM_FAULT_SIGBUS;
+@@ -3155,9 +3162,12 @@ static int do_fault(struct mm_struct *mm, struct vm_area_struct *vma,
+ 		unsigned long address, pte_t *page_table, pmd_t *pmd,
+ 		unsigned int flags, pte_t orig_pte)
+ {
++
+ 	pgoff_t pgoff = (((address & PAGE_MASK)
+ 			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+ 
++	//update_pfstat(PFSTSAT_FILE_FAULT);
++
+ 	pte_unmap(page_table);
+ 	/* The VMA was not fully populated on mmap() or missing VM_DONTEXPAND */
+ 	if (!vma->vm_ops->fault)
+@@ -3275,6 +3285,8 @@ out:
+ static int create_huge_pmd(struct mm_struct *mm, struct vm_area_struct *vma,
+ 			unsigned long address, pmd_t *pmd, unsigned int flags)
+ {
++	update_pfstat(PFSTSAT_TRANSPARENT_HUGEMAGE);
++
+ 	if (vma_is_anonymous(vma))
+ 		return do_huge_pmd_anonymous_page(mm, vma, address, pmd, flags);
+ 	if (vma->vm_ops->pmd_fault)
+@@ -3324,6 +3336,9 @@ static int handle_pte_fault(struct mm_struct *mm,
+ 	 * we later double check anyway with the ptl lock held. So here
+ 	 * a barrier will do.
+ 	 */
++
++	update_pfstat(PFSTSAT_ALLOCED_PAGES);
++
+ 	entry = *pte;
+ 	barrier();
+ 	if (!pte_present(entry)) {
+@@ -3394,6 +3409,7 @@ static int __handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
+ 	pmd = pmd_alloc(mm, pud, address);
+ 	if (!pmd)
+ 		return VM_FAULT_OOM;
++
+ 	if (pmd_none(*pmd) && transparent_hugepage_enabled(vma)) {
+ 		int ret = create_huge_pmd(mm, vma, address, pmd, flags);
+ 		if (!(ret & VM_FAULT_FALLBACK))
+diff --git a/mm/mmap.c b/mm/mmap.c
+index 455772a..500f3ad 100644
+--- a/mm/mmap.c
++++ b/mm/mmap.c
+@@ -2216,6 +2216,9 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
+ 	anon_vma_unlock_write(vma->anon_vma);
+ 	khugepaged_enter_vma_merge(vma, vma->vm_flags);
+ 	validate_mm(mm);
++
++	update_pfstat(PFSTSAT_STACK_LOW);
++
+ 	return error;
+ }
+ #endif /* CONFIG_STACK_GROWSUP || CONFIG_IA64 */
+@@ -2286,6 +2289,9 @@ int expand_downwards(struct vm_area_struct *vma,
+ 	anon_vma_unlock_write(vma->anon_vma);
+ 	khugepaged_enter_vma_merge(vma, vma->vm_flags);
+ 	validate_mm(mm);
++
++	update_pfstat(PFSTSAT_STACK_LOW);
++
+ 	return error;
+ }
+ 
