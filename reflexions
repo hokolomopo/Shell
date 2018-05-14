@@ -25,5 +25,5 @@ Questions:
 1) Ou mettre les syscalls? Pour faire mes tests je les remet dans sys.c comme le projet d'avant mais 90% sûr que c'es pas terrible
 2) J'ai besoin du super_block dans les sycalls (vu que c'est là qu'on store le MDP/si le FS est lock ou pas), comment je fait?
 J'ai fait un filp_open() (basiquement un open syscall, mais du kernel), mais j'ai peur qu'il lise des trucs inutiles (le contenu du fichier),
-j'ai vu que dans d'anciennes versions de linux tu pouvais simplement faire char* path -> inode, mais sur la version actuelle ca a changé donc
-no idea.
+j'ai vu que dans d'anciennes versions de linux tu pouvais simplement tranformer un char* path en inode, mais sur la version actuelle ca
+a changé donc no idea.
