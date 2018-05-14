@@ -1,0 +1,29 @@
+Idées so far: 
+
+-Stocker le mot de passe dans le fiels OEM dans le boot sector de la partition FAT 
+(https://en.wikipedia.org/wiki/Design_of_the_FAT_file_system#BIOS_Parameter_Block, CTRL + F "OEM Name")
+
+-Mettre si le FS(File Sytem) est lock/unlocked au même endroit (ca prend un bit, on a 8 bytes -> on a 63 bits pour stocker le mot de passe)
+
+-Faire un syscall pour lock/unlock le FS
+
+Questions : 
+1) Comment savoir quel FS on veut unlock? Tous les unlocker je suppose mais c'est un peu bizarre je trouve
+2) Comment avoir la mount point des FS en FAT? C'est probablement plus simple de faire un truc en user space, probablement avec /proc 
+
+-Mettre si le fichier est caché ou non avec un FLAG dans le directory entry des formats FAT. Y'a 8 bits de FLAGS, 6 sont utilisés,
+Wikipedia me dit que les 2 derniers sont parfois utilisés par certains trucs, les autres sources me disent qu'ils serevtn à rien,
+je vais suivre les autres sources et me dire que on peut mettre 1 bit caché/pas caché là.
+
+-Modifier fat_readdir/fat_scan dans fs/fat/dir.c pour pas afficher les fichiers cachés
+fat_readdir : au début de start_filldier, rajouter une condition (de->attr & NOTRE_HIDDEN_ATTRIBUT) et goto record_end si il est caché
+fat_scan : ??? rajouter uen conditon avant le return 0 ???
+
+-Un autre syscall pour cacher un fichier 
+
+Questions: 
+1) Ou mettre les syscalls? Pour faire mes tests je les remet dans sys.c comme le projet d'avant mais 90% sûr que c'es pas terrible
+2) J'ai besoin du super_block dans les sycalls (vu que c'est là qu'on store le MDP/si le FS est lock ou pas), comment je fait?
+J'ai fait un filp_open() (basiquement un open syscall, mais du kernel), mais j'ai peur qu'il lise des trucs inutiles (le contenu du fichier),
+j'ai vu que dans d'anciennes versions de linux tu pouvais simplement faire char* path -> inode, mais sur la version actuelle ca a changé donc
+no idea.
