@@ -3,6 +3,8 @@ Idées so far:
 -Stocker le mot de passe dans le fiels OEM dans le boot sector de la partition FAT 
 (https://en.wikipedia.org/wiki/Design_of_the_FAT_file_system#BIOS_Parameter_Block, CTRL + F "OEM Name")
 
+-Load le MDP dans le msdos_sb_info du super clock avec la fctfat_fill_super de fs/fat/inode.c
+
 -Mettre si le FS(File Sytem) est lock/unlocked au même endroit (ca prend un bit, on a 8 bytes -> on a 63 bits pour stocker le mot de passe)
 
 -Faire un syscall pour lock/unlock le FS
