@@ -19,7 +19,7 @@ je vais suivre les autres sources et me dire que on peut mettre 1 bit caché/pas
 fat_readdir : au début de start_filldier, rajouter une condition (de->attr & NOTRE_HIDDEN_ATTRIBUT) et goto record_end si il est caché
 fat_scan : ??? rajouter uen conditon avant le return 0 ???
 
--Un autre syscall pour cacher un fichier 
+-Modifier fs/fat/file.c -> ioctl pour changer les attributs 
 
 Questions: 
 1) Ou mettre les syscalls? Pour faire mes tests je les remet dans sys.c comme le projet d'avant mais 90% sûr que c'es pas terrible
