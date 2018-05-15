@@ -5,7 +5,9 @@ Idées so far:
 
 -Load le MDP dans le msdos_sb_info du super clock avec la fctfat_fill_super de fs/fat/inode.c
 
--Mettre si le FS(File Sytem) est lock/unlocked au même endroit (ca prend un bit, on a 8 bytes -> on a 63 bits pour stocker le mot de passe)
+-Mettre si le FS(File Sytem) est lock/unlocked au même endroit ~~(ca prend un bit, on a 8 bytes -> on a 63 bits pour stocker le mot de passe)~~
+J'ai pris un byte pour mettre le booléen lock/unlock -> nous reste 7 bytes, je vais mettre un '\0' pour termnier le mot de passe c'est plus simple à 
+géréer -> mot de passe de 6 bytes (char)
 
 -Faire un syscall pour lock/unlock le FS
 
