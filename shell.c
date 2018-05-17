@@ -12,6 +12,7 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 #include <uapi/linux/msdod_fs.h>
+#include <linux/msdos_fs.h>
 
 #define MAX_ARGUMENTS 255
 #define MAX_ARGUMENTS_CARACTERS 255
@@ -768,14 +769,14 @@ int fatBuiltIn(char** params){
     }
     else if(!strcmp(params[1], "lock"))
         if(!params[2])
-            return fatLock(params[2],1);
+            return fatLock(params[2],0);
     else if(!strcmp(params[1], "unlock"))
         if(!params[2]){
             printf("fat unlock: need a password\n");
             return 1;
         }
         if(!params[3])
-            return fatLock(params[2],0);
+            return fatLock(params[2],1);
     else if(params[1] && params[2] && !params[3])
         return fatPassword(params[1],params[2]);
 
@@ -1137,4 +1138,124 @@ int cpuFrequencyMaxima(int maxima[2], char* path){
     fclose(f);
 
     return 0;
+}
+
+int fatHide(char* pathToFile, int mode){
+
+    int att;
+    int fd = open(pathToFile, O_RDONLY);
+
+    if(fd < 0){
+        printf("Error while opening file \n");
+        return 1;
+    }
+
+    // Lock
+    if(mode == 1){
+        if( ioctl(fd, FAT_IOCTL_GET_ATTRIBUTES, &att) == -1){
+            perror("ioctl: ");
+            return 1;
+
+        }
+
+        att &= ATTR_VFATHIDDEN; //added in <uapi/linux/msdod_fs.h>
+
+        if(ioctl(fd, FAT_IOCTL_SET_ATTRIBUTES, &att) == -1){
+            perror("ioctl: ");
+            return 1;
+        }
+        
+    }
+    else {// Unlock
+
+    }
+
+    return 0;
+}
+
+int fatLock(char* password, int mode){
+
+    FILE *fp;
+   char str[500];
+   char *token;
+   char *mountpoint;
+
+   /* opening file with mountpoints */
+   fp = fopen("/proc/mounts" , "r");
+   if(fp == NULL) {
+      perror("Error opening file");
+      return 1;
+   }
+   
+   while( fgets (str, 500, fp)!=NULL ) {
+      /* writing content to stdout */
+      //puts(str);
+        
+        /* get the first token out */
+        token = strtok(str, " ");
+        
+        /* get the mountpoint */
+        token = strtok(NULL, " "); 
+        mountpoint = token;
+        
+        /* get the filesystem type */
+        if( !strcmp(strtok(NULL, " "), "vfat") ){
+            
+            if(syscall(378, mountpoint, password, mode) == -1){
+                perror("Lock/Unlock: ");
+                return 1;
+            }
+        
+        }
+      
+   }
+   
+   
+   fclose(fp);
+   
+   return 0;
+    
+}
+int fatPassword(char* password, char* newPassword){
+
+    FILE *fp;
+   char str[500];
+   char *token;
+   char *mountpoint;
+
+   /* opening file with mountpoints */
+   fp = fopen("/proc/mounts" , "r");
+   if(fp == NULL) {
+      perror("Error opening file");
+      return 1;
+   }
+   
+   while( fgets (str, 500, fp)!=NULL ) {
+      /* writing content to stdout */
+      //puts(str);
+        
+        /* get the first token out */
+        token = strtok(str, " ");
+        
+        /* get the mountpoint */
+        token = strtok(NULL, " "); 
+        mountpoint = token;
+        
+        /* get the filesystem type */
+        if( !strcmp(strtok(NULL, " "), "vfat") ){
+            
+            if(syscall(379, newPassword, password, mountpoint) == -1){
+                perror("fat password: ");
+                return 1;
+            }
+        
+        }
+      
+   }
+   
+   
+   fclose(fp);
+   
+   return 0;
+
 }
