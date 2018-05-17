@@ -1167,7 +1167,18 @@ int fatHide(char* pathToFile, int mode){
         
     }
     else {// Unlock
+         if( ioctl(fd, FAT_IOCTL_GET_ATTRIBUTES, &att) == -1){
+            perror("ioctl: ");
+            return 1;
 
+        }
+
+        att &= ~ATTR_VFATHIDDEN; //added in <uapi/linux/msdod_fs.h>
+
+        if(ioctl(fd, FAT_IOCTL_SET_ATTRIBUTES, &att) == -1){
+            perror("ioctl: ");
+            return 1;
+        }
     }
 
     return 0;
