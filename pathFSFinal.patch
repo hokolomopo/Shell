@@ -1,0 +1,342 @@
+diff --git a/arch/x86/entry/syscalls/syscall_32.tbl b/arch/x86/entry/syscalls/syscall_32.tbl
+index 5819079..9545ad7 100644
+--- a/arch/x86/entry/syscalls/syscall_32.tbl
++++ b/arch/x86/entry/syscalls/syscall_32.tbl
+@@ -384,3 +384,5 @@
+ 375	i386	membarrier		sys_membarrier
+ 376	i386	mlock2			sys_mlock2
+ 377 i386  pfstat    sys_pfstat
++378 i386 lock_fs    sys_lock_fs
++379 i386 fat_change_password    sys_fat_change_password
+diff --git a/fs/fat/dir.c b/fs/fat/dir.c
+index 8b2127f..b50f261 100644
+--- a/fs/fat/dir.c
++++ b/fs/fat/dir.c
+@@ -476,6 +476,7 @@ int fat_search_long(struct inode *inode, const unsigned char *name,
+ 	while (1) {
+ 		if (fat_get_entry(inode, &cpos, &bh, &de) == -1)
+ 			goto end_of_dir;
++
+ parse_record:
+ 		nr_slots = 0;
+ 		if (de->name[0] == DELETED_FLAG)
+@@ -588,6 +589,7 @@ static int __fat_readdir(struct inode *inode, struct file *file,
+ get_new:
+ 	if (fat_get_entry(inode, &cpos, &bh, &de) == -1)
+ 		goto end_of_dir;
++
+ parse_record:
+ 	nr_slots = 0;
+ 	/*
+@@ -647,6 +649,7 @@ parse_record:
+ 	}
+ 
+ 	short_len = fat_parse_short(sb, de, bufname, sbi->options.dotsOK);
++
+ 	if (short_len == 0)
+ 		goto record_end;
+ 
+@@ -654,6 +657,12 @@ parse_record:
+ 	fill_len = short_len;
+ 
+ start_filldir:
++
++	//VFAT_PATCH
++	if(!sbi->lock_mode && (de->attr & ATTR_VFATHIDDEN)){
++		goto record_end;
++	}
++
+ 	ctx->pos = cpos - (nr_slots + 1) * sizeof(struct msdos_dir_entry);
+ 	if (fake_offset && ctx->pos < 2)
+ 		ctx->pos = 2;
+@@ -956,6 +965,8 @@ int fat_scan(struct inode *dir, const unsigned char *name,
+ {
+ 	struct super_block *sb = dir->i_sb;
+ 
++	printk("fat : scan\n");
++
+ 	sinfo->slot_off = 0;
+ 	sinfo->bh = NULL;
+ 	while (fat_get_short_entry(dir, &sinfo->slot_off, &sinfo->bh,
+diff --git a/fs/fat/fat.h b/fs/fat/fat.h
+index be5e153..24ca942 100644
+--- a/fs/fat/fat.h
++++ b/fs/fat/fat.h
+@@ -23,6 +23,9 @@
+ #define FAT_NFS_STALE_RW	1      /* NFS RW support, can cause ESTALE */
+ #define FAT_NFS_NOSTALE_RO	2      /* NFS RO support, no ESTALE issue */
+ 
++//VFAT_PATCH
++#define FAT_PASSWORD_START 127
++
+ struct fat_mount_options {
+ 	kuid_t fs_uid;
+ 	kgid_t fs_gid;
+@@ -101,6 +104,10 @@ struct msdos_sb_info {
+ 
+ 	unsigned int dirty;           /* fs state before mount */
+ 	struct rcu_head rcu;
++
++	//VFAT_PATCH
++	 int lock_mode;
++	 char passwd[8];
+ };
+ 
+ #define FAT_CACHE_VALID	0	/* special case for valid cache */
+diff --git a/fs/fat/file.c b/fs/fat/file.c
+index a08f103..a7ee860 100644
+--- a/fs/fat/file.c
++++ b/fs/fat/file.c
+@@ -45,6 +45,14 @@ static int fat_ioctl_set_attributes(struct file *file, u32 __user *user_attr)
+ 		goto out;
+ 	mutex_lock(&inode->i_mutex);
+ 
++	//VFAT_PATCH
++	if(!sbi->lock_mode){
++		attr &= ~ATTR_VFATHIDDEN;
++	}
++	if(!sbi->lock_mode && ((MSDOS_I(inode)->i_attrs & ATTR_VFATHIDDEN))){
++		attr |= ATTR_VFATHIDDEN;
++	}
++
+ 	/*
+ 	 * ATTR_VOLUME and ATTR_DIR cannot be changed; this also
+ 	 * prevents the user from turning us into a VFAT
+@@ -164,8 +172,20 @@ int fat_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
+ 	return res ? res : err;
+ }
+ 
++//VFAT_PATCH
++ssize_t
++vfat_open(struct inode *inode, struct file *file){
++	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
++
++	if(!sbi->lock_mode && (MSDOS_I(inode)->i_attrs & ATTR_VFATHIDDEN)){
++		return -ENOENT;
++	}
++
++	return 0;
++}
+ 
+ const struct file_operations fat_file_operations = {
++	.open    = vfat_open,
+ 	.llseek		= generic_file_llseek,
+ 	.read_iter	= generic_file_read_iter,
+ 	.write_iter	= generic_file_write_iter,
+diff --git a/fs/fat/inode.c b/fs/fat/inode.c
+index 509411d..938040e 100644
+--- a/fs/fat/inode.c
++++ b/fs/fat/inode.c
+@@ -22,6 +22,13 @@
+ #include <asm/unaligned.h>
+ #include "fat.h"
+ 
++#include <linux/syscalls.h>
++#include <linux/namei.h>
++
++#ifndef ISVFAT
++# define ISVFAT(a)	((a[0] == 'v') && (a[1] == 'f') && (a[2] == 'a') && (a[3] == 't'))
++#endif
++
+ #ifndef CONFIG_FAT_DEFAULT_IOCHARSET
+ /* if user don't select VFAT, this is undefined. */
+ #define CONFIG_FAT_DEFAULT_IOCHARSET	""
+@@ -1496,6 +1503,7 @@ int fat_fill_super(struct super_block *sb, void *data, int silent, int isvfat,
+ 	int debug;
+ 	long error;
+ 	char buf[50];
++	char* fat_password;
+ 
+ 	/*
+ 	 * GFP_KERNEL is ok here, because while we do hold the
+@@ -1535,6 +1543,19 @@ int fat_fill_super(struct super_block *sb, void *data, int silent, int isvfat,
+ 	if (error == -EINVAL && sbi->options.dos1xfloppy)
+ 		error = fat_read_static_bpb(sb,
+ 			(struct fat_boot_sector *)bh->b_data, silent, &bpb);
++
++	//VFAT_PATCH
++	sbi->lock_mode = 0;
++	fat_password = ((struct fat_boot_sector *)bh->b_data)->system_id;
++	if(fat_password[0] != FAT_PASSWORD_START){
++		fat_password[0] = FAT_PASSWORD_START;
++		fat_password[1] = '\0';
++		mark_buffer_dirty(bh);
++		sync_dirty_buffer(bh);
++	}
++	memcpy(sbi->passwd, fat_password, 8);
++
++
+ 	brelse(bh);
+ 
+ 	if (error == -EINVAL)
+@@ -1545,6 +1566,9 @@ int fat_fill_super(struct super_block *sb, void *data, int silent, int isvfat,
+ 	logical_sector_size = bpb.fat_sector_size;
+ 	sbi->sec_per_clus = bpb.fat_sec_per_clus;
+ 
++
++
++
+ 	error = -EIO;
+ 	if (logical_sector_size < sb->s_blocksize) {
+ 		fat_msg(sb, KERN_ERR, "logical sector size too small for device"
+@@ -1849,3 +1873,130 @@ module_init(init_fat_fs)
+ module_exit(exit_fat_fs)
+ 
+ MODULE_LICENSE("GPL");
++
++//VFAT_PATCH
++SYSCALL_DEFINE3(lock_fs, char*, u_fs, char*, u_paswd, int, mode){
++	struct super_block* sb;
++	struct file* f;
++	int i = 0, err = 0;
++	struct msdos_sb_info *sbi;
++	char fs[500], in_passwd[7];
++
++	if(copy_from_user(fs, u_fs, 500)){
++		err = -EFAULT;
++		goto out;
++	}
++
++	if(mode == 1 && copy_from_user(in_passwd, u_paswd, 7)){
++		err = -EFAULT;
++		goto out;
++	}
++
++	f = filp_open(fs, O_RDONLY, 0);
++	if(IS_ERR(f)){
++		err = -ENOENT;
++		goto out;
++	}
++
++	sb = f->f_inode->i_sb;
++	sbi = sb->s_fs_info;
++
++	if(!ISVFAT(sb->s_type->name)){
++		err = -EBADF;
++		goto out;
++	}
++
++	mutex_lock(&sbi->s_lock);
++
++	//Lock the FS
++	if(mode == 0){
++		sbi->lock_mode = 0;
++		goto close;
++	}
++
++	//If we're already on unlocked mode goto end
++	if(sbi->lock_mode == 1)
++		goto close;
++
++	for(i = 0; in_passwd[i] != '\0' && i < 7;i++){
++		if(sbi->passwd[i+1] != in_passwd[i]){
++			err = -EINVAL;
++			goto close;
++		}
++	}
++
++	sbi->lock_mode = 1;
++
++close:
++	mutex_unlock(&sbi->s_lock);
++	filp_close(f, NULL);
++out :
++	return err;
++}
++
++
++SYSCALL_DEFINE3(fat_change_password, char*, u_new, char*, u_old, char*, u_fs){
++	struct fat_boot_sector* fbs;
++	struct buffer_head *bh;
++	struct super_block* sb;
++	struct file* f;
++	int i = 0, err = 0;
++	struct msdos_sb_info *sbi;
++	char old[7], new[7], fs[500];
++
++
++	if(copy_from_user(fs, u_fs, 500)){
++		err = -EFAULT;
++		goto out;
++	}
++
++	if(copy_from_user(new, u_new, 7) || copy_from_user(old, u_old, 7)){
++		err = -EFAULT;
++		goto out;
++	}
++
++	f = filp_open(fs, O_RDONLY, 0);
++	if(IS_ERR(f)){
++		err = -ENOENT;
++		goto out;
++	}
++
++	sb = f->f_inode->i_sb;
++	sbi = sb->s_fs_info;
++
++	mutex_lock(&sbi->s_lock);
++
++	if(!ISVFAT(sb->s_type->name)){
++		err = -EBADF;
++		goto close;
++	}
++
++	for(i = 0; sbi->passwd[i] != '\0' && i < 7;i++){
++		if(sbi->passwd[i+1] != old[i]){
++			err = -EINVAL;
++			goto close;
++		}
++	}
++
++	bh = sb_bread(sb, 0);
++	if(bh == NULL){
++		err = -EIO;
++		goto close;
++	}
++	fbs = (struct fat_boot_sector*)bh->b_data;
++
++	for(i = 1;i < 8;i++){
++		fbs->system_id[i] = new[i-1];
++		sbi->passwd[i] = new[i-1];
++	}
++
++	mark_buffer_dirty(bh);
++	sync_dirty_buffer(bh);
++
++	brelse(bh);
++close :
++	mutex_unlock(&sbi->s_lock);
++	filp_close(f, NULL);
++out :
++	return err;
++}
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 6a9ee5d..55531fe 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -891,4 +891,9 @@ asmlinkage long sys_mlock2(unsigned long start, size_t len, int flags);
+ 
+ asmlinkage long sys_pfstat(pid_t pid, struct pfstat* pfstats);
+ 
++asmlinkage long sys_lock_fs(char* fs, char* u_paswd, int mode);//VFAT_PATCH
++asmlinkage long sys_fat_change_password(char* u_new, char* u_old, char* u_fs);
++
++
++
+ #endif
+diff --git a/include/uapi/linux/msdos_fs.h b/include/uapi/linux/msdos_fs.h
+index e956704..85e233a 100644
+--- a/include/uapi/linux/msdos_fs.h
++++ b/include/uapi/linux/msdos_fs.h
+@@ -37,9 +37,10 @@
+ #define ATTR_VOLUME	8	/* volume label */
+ #define ATTR_DIR	16	/* directory */
+ #define ATTR_ARCH	32	/* archived */
++#define ATTR_VFATHIDDEN 64 //VFAT_PATCH
+ 
+ /* attribute bits that are copied "as is" */
+-#define ATTR_UNUSED	(ATTR_VOLUME | ATTR_ARCH | ATTR_SYS | ATTR_HIDDEN)
++#define ATTR_UNUSED	(ATTR_VOLUME | ATTR_ARCH | ATTR_SYS | ATTR_HIDDEN | ATTR_VFATHIDDEN)
+ /* bits that are used by the Windows 95/Windows NT extended FAT */
+ #define ATTR_EXT	(ATTR_RO | ATTR_HIDDEN | ATTR_SYS | ATTR_VOLUME)
+ 
