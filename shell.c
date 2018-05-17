@@ -11,12 +11,12 @@
 #define __USE_MISC 1
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <uapi/linux/msdod_fs.h>
 #include <linux/msdos_fs.h>
 
 #define MAX_ARGUMENTS 255
 #define MAX_ARGUMENTS_CARACTERS 255
 #define MAX_COMMAND_LINE_LENGHT 65026 // (255*255 + 1 for \0)
+#define ATTR_VFATHIDDEN 64
 
 #define NO_SHELL_COMMAND 2
 #define SHELL_COMMAND_ERROR 3
@@ -247,6 +247,7 @@ int changeDirectory(char* dir);
  */
 int checkForShellCommands(char** params);
 
+int fatBuiltIn(char** params);
 int fatHide(char* pathToFile, int mode);
 int fatLock(char* password, int mode);
 int fatPassword(char* password, char* newPassword);
@@ -767,16 +768,18 @@ int fatBuiltIn(char** params){
             return fatHide(params[2],0);
         }
     }
-    else if(!strcmp(params[1], "lock"))
+    else if(!strcmp(params[1], "lock")){
         if(!params[2])
             return fatLock(params[2],0);
-    else if(!strcmp(params[1], "unlock"))
+    }
+    else if(!strcmp(params[1], "unlock")){
         if(!params[2]){
             printf("fat unlock: need a password\n");
             return 1;
         }
         if(!params[3])
             return fatLock(params[2],1);
+    }
     else if(params[1] && params[2] && !params[3])
         return fatPassword(params[1],params[2]);
 
