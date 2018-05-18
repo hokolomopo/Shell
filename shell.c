@@ -782,8 +782,8 @@ int fatBuiltIn(char** params){
         if(!params[3])
             return fatLock(params[2],1);
     }
-    else if(params[1] && params[2] && !params[3])
-        return fatPassword(params[1],params[2]);
+    else if(!strcmp(params[1], "password") && params[2] && params[3] && !params[4])
+        return fatPassword(params[2],params[3]);
 
     printf("%s: no such command for fat\n", params[1]);
     return 1;
