@@ -560,4 +560,37 @@ index 455772a..64e627f 100644
 +
  	return error;
  }
+diff --git a/include/linux/pfstat.h b/include/linux/pfstat.h
+new file mode 100644
+index 0000000..81aeb35
+--- /dev/null
++++ b/include/linux/pfstat.h
+@@ -0,0 +1,27 @@
++#ifndef PFSTAT
++#define PFSTAT
++
++
++enum pfstat_field{
++  PFSTSAT_STACK_LOW,
++  PFSTSAT_TRANSPARENT_HUGEMAGE,
++  PFSTSAT_ANONYMOUS_FAULT,
++  PFSTSAT_FILE_FAULT,
++  PFSTSAT_SWAPPED_BACK,
++  PFSTSAT_COW,
++  PFSTSAT_ALLOCED_PAGES
++};
++
++struct pfstat {
++	int stack_low; //Number of times the stack was expanded after a page fault
++	int transparent_hugepage_fault; //Number of huge page transparent PMD fault
++	int anonymous_fault; //Normal anonymous page fault
++	int file_fault; //Normal file-backed page fault
++	int swapped_back; //Number of fault that produced a read-from swap to put
++	int copy_on_write; //Number of fault which backed a copy-on-write;
++	int fault_alloced_page; //Number of normal pages allocated due to a page
++};
++
++void update_pfstat(enum pfstat_field field);
++
++#endif /* PFSTAT */
  
