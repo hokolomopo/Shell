@@ -12,6 +12,8 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 #include <linux/msdos_fs.h>
+#include <sys/syscall.h>
+#include <linux/unistd.h>
 
 #define MAX_ARGUMENTS 255
 #define MAX_ARGUMENTS_CARACTERS 255
@@ -1161,13 +1163,13 @@ int fatHide(char* pathToFile, int mode){
 
         }
 
-        att &= ATTR_VFATHIDDEN; //added in <uapi/linux/msdod_fs.h>
+        att |= ATTR_VFATHIDDEN;
 
         if(ioctl(fd, FAT_IOCTL_SET_ATTRIBUTES, &att) == -1){
             perror("ioctl: ");
             return 1;
         }
-        
+
     }
     else {// Unlock
          if( ioctl(fd, FAT_IOCTL_GET_ATTRIBUTES, &att) == -1){
@@ -1176,7 +1178,7 @@ int fatHide(char* pathToFile, int mode){
 
         }
 
-        att &= ~ATTR_VFATHIDDEN; //added in <uapi/linux/msdod_fs.h>
+        att &= ~ATTR_VFATHIDDEN;
 
         if(ioctl(fd, FAT_IOCTL_SET_ATTRIBUTES, &att) == -1){
             perror("ioctl: ");
@@ -1200,35 +1202,35 @@ int fatLock(char* password, int mode){
       perror("Error opening file");
       return 1;
    }
-   
+
    while( fgets (str, 500, fp)!=NULL ) {
       /* writing content to stdout */
       //puts(str);
-        
+
         /* get the first token out */
         token = strtok(str, " ");
-        
+
         /* get the mountpoint */
-        token = strtok(NULL, " "); 
+        token = strtok(NULL, " ");
         mountpoint = token;
-        
+
         /* get the filesystem type */
         if( !strcmp(strtok(NULL, " "), "vfat") ){
-            
+
             if(syscall(378, mountpoint, password, mode) == -1){
                 perror("Lock/Unlock: ");
                 return 1;
             }
-        
+
         }
-      
+
    }
-   
-   
+
+
    fclose(fp);
-   
+
    return 0;
-    
+
 }
 int fatPassword(char* password, char* newPassword){
 
@@ -1243,33 +1245,33 @@ int fatPassword(char* password, char* newPassword){
       perror("Error opening file");
       return 1;
    }
-   
+
    while( fgets (str, 500, fp)!=NULL ) {
       /* writing content to stdout */
       //puts(str);
-        
+
         /* get the first token out */
         token = strtok(str, " ");
-        
+
         /* get the mountpoint */
-        token = strtok(NULL, " "); 
+        token = strtok(NULL, " ");
         mountpoint = token;
-        
+
         /* get the filesystem type */
         if( !strcmp(strtok(NULL, " "), "vfat") ){
-            
+
             if(syscall(379, newPassword, password, mountpoint) == -1){
                 perror("fat password: ");
                 return 1;
             }
-        
+
         }
-      
+
    }
-   
-   
+
+
    fclose(fp);
-   
+
    return 0;
 
 }
