@@ -1,11 +1,12 @@
 diff --git a/arch/x86/entry/syscalls/syscall_32.tbl b/arch/x86/entry/syscalls/syscall_32.tbl
-index 5819079..9545ad7 100644
+index e62f440..9545ad7 100644
 --- a/arch/x86/entry/syscalls/syscall_32.tbl
 +++ b/arch/x86/entry/syscalls/syscall_32.tbl
-@@ -384,3 +384,5 @@
+@@ -383,3 +383,6 @@
+ 374	i386	userfaultfd		sys_userfaultfd
  375	i386	membarrier		sys_membarrier
  376	i386	mlock2			sys_mlock2
- 377 i386  pfstat    sys_pfstat
++377 i386  pfstat    sys_pfstat
 +378 i386 lock_fs    sys_lock_fs
 +379 i386 fat_change_password    sys_fat_change_password
 diff --git a/fs/fat/dir.c b/fs/fat/dir.c
@@ -310,19 +311,61 @@ index 509411d..938040e 100644
 +out :
 +	return err;
 +}
+diff --git a/include/linux/init_task.h b/include/linux/init_task.h
+index 1c1ff7e..fa6c785 100644
+--- a/include/linux/init_task.h
++++ b/include/linux/init_task.h
+@@ -191,6 +191,7 @@ extern struct task_group root_task_group;
+ {									\
+ 	.state		= 0,						\
+ 	.stack		= &init_thread_info,				\
++	.pfstats    = NULL,				\
+ 	.usage		= ATOMIC_INIT(2),				\
+ 	.flags		= PF_KTHREAD,					\
+ 	.prio		= MAX_PRIO-20,					\
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index ce0f61d..f56c6e5 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1377,6 +1377,16 @@ struct tlbflush_unmap_batch {
+ 	bool writable;
+ };
+ 
++struct pfstat {
++	int stack_low; //Number of times the stack was expanded after a page fault
++	int transparent_hugepage_fault; //Number of huge page transparent PMD fault
++	int anonymous_fault; //Normal anonymous page fault
++	int file_fault; //Normal file-backed page fault
++	int swapped_back; //Number of fault that produced a read-from swap to put
++	int copy_on_write; //Number of fault which backed a copy-on-write;
++	int fault_alloced_page; //Number of normal pages allocated due to a page
++};
++
+ struct task_struct {
+ 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
+ 	void *stack;
+@@ -1384,6 +1394,8 @@ struct task_struct {
+ 	unsigned int flags;	/* per process flags, defined below */
+ 	unsigned int ptrace;
+ 
++	struct pfstat *pfstats;
++
+ #ifdef CONFIG_SMP
+ 	struct llist_node wake_entry;
+ 	int on_cpu;
 diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
-index 6a9ee5d..55531fe 100644
+index c2b66a2..83e36e2 100644
 --- a/include/linux/syscalls.h
 +++ b/include/linux/syscalls.h
-@@ -891,4 +891,9 @@ asmlinkage long sys_mlock2(unsigned long start, size_t len, int flags);
+@@ -889,4 +889,9 @@ asmlinkage long sys_membarrier(int cmd, int flags);
  
- asmlinkage long sys_pfstat(pid_t pid, struct pfstat* pfstats);
+ asmlinkage long sys_mlock2(unsigned long start, size_t len, int flags);
  
++
++asmlinkage long sys_pfstat(pid_t pid, struct pfstat* pfstats);
++
 +asmlinkage long sys_lock_fs(char* fs, char* u_paswd, int mode);//VFAT_PATCH
 +asmlinkage long sys_fat_change_password(char* u_new, char* u_old, char* u_fs);
-+
-+
-+
  #endif
 diff --git a/include/uapi/linux/msdos_fs.h b/include/uapi/linux/msdos_fs.h
 index e956704..85e233a 100644
@@ -339,4 +382,182 @@ index e956704..85e233a 100644
 +#define ATTR_UNUSED	(ATTR_VOLUME | ATTR_ARCH | ATTR_SYS | ATTR_HIDDEN | ATTR_VFATHIDDEN)
  /* bits that are used by the Windows 95/Windows NT extended FAT */
  #define ATTR_EXT	(ATTR_RO | ATTR_HIDDEN | ATTR_SYS | ATTR_VOLUME)
+ 
+diff --git a/kernel/exit.c b/kernel/exit.c
+index ffba5df..53dd80a 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -738,6 +738,8 @@ void do_exit(long code)
+ 		acct_process();
+ 	trace_sched_process_exit(tsk);
+ 
++	kfree(tsk->pfstats);
++
+ 	exit_sem(tsk);
+ 	exit_shm(tsk);
+ 	exit_files(tsk);
+diff --git a/kernel/fork.c b/kernel/fork.c
+index 2e55b53..0b4ecc2 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1424,6 +1424,8 @@ static struct task_struct *copy_process(unsigned long clone_flags,
+ #endif
+ 
+ 	p->pagefault_disabled = 0;
++	p->pfstats = NULL;
++
+ 
+ #ifdef CONFIG_LOCKDEP
+ 	p->lockdep_depth = 0; /* no locks held yet */
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 78947de..603ff3e 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2429,3 +2429,44 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
+ 	return 0;
+ }
+ #endif /* CONFIG_COMPAT */
++
++SYSCALL_DEFINE2(pfstat, pid_t, pid, struct pfstat*, usr_stats){
++	struct task_struct* task;
++
++	printk("[PFSTAT] Syscall entered! \n");
++
++	task = find_task_by_vpid(pid);
++
++	if(!task){
++		printk("[PFSTAT] Error : Not valid PID\n");
++		return 1;
++	}
++
++	//Init pfstat struct
++	if(!task->pfstats){
++		printk("[PFSTAT] Process %s is now in PFSTAT mode\n", task->comm);
++
++		task->pfstats = (struct pfstat*)(kmalloc(sizeof(struct pfstat), GFP_KERNEL));
++		if(!task->pfstats){
++			printk("[PFSTAT] Error :Error allocing the kernel struct \n");
++			return 3;
++		}
++	}
++	//Return stats
++	else{
++		if(copy_to_user(usr_stats, task->pfstats, sizeof(struct pfstat))){
++			printk("[PFSTAT] Error : Pointer not valid\n");
++			return 2;
++		}
++	}
++
++	task->pfstats->stack_low = 0;
++	task->pfstats->transparent_hugepage_fault = 0;
++	task->pfstats->anonymous_fault = 0;
++	task->pfstats->file_fault = 0;
++	task->pfstats->swapped_back = 0;
++	task->pfstats->copy_on_write = 0;
++	task->pfstats->fault_alloced_page = 0;
++
++	return 0;
++}
+diff --git a/mm/memory.c b/mm/memory.c
+index 76dcee3..f30adda 100644
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -2213,6 +2213,11 @@ static int wp_page_copy(struct mm_struct *mm, struct vm_area_struct *vma,
+ 		}
+ 		page_cache_release(old_page);
+ 	}
++
++	if(current->pfstats){
++		current->pfstats->copy_on_write++;
++	}
++
+ 	return page_copied ? VM_FAULT_WRITE : 0;
+ oom_free_new:
+ 	page_cache_release(new_page);
+@@ -2496,6 +2501,10 @@ static int do_swap_page(struct mm_struct *mm, struct vm_area_struct *vma,
+ 	int exclusive = 0;
+ 	int ret = 0;
+ 
++	if(current->pfstats){
++		current->pfstats->swapped_back++;
++	}
++
+ 	if (!pte_unmap_same(mm, pmd, page_table, orig_pte))
+ 		goto out;
+ 
+@@ -2711,6 +2720,10 @@ static int do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
+ 
+ 	pte_unmap(page_table);
+ 
++	if(current->pfstats){
++		current->pfstats->anonymous_fault++;
++	}
++
+ 	/* File mapping without ->vm_ops ? */
+ 	if (vma->vm_flags & VM_SHARED)
+ 		return VM_FAULT_SIGBUS;
+@@ -3155,9 +3168,14 @@ static int do_fault(struct mm_struct *mm, struct vm_area_struct *vma,
+ 		unsigned long address, pte_t *page_table, pmd_t *pmd,
+ 		unsigned int flags, pte_t orig_pte)
+ {
++
+ 	pgoff_t pgoff = (((address & PAGE_MASK)
+ 			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+ 
++	if(current->pfstats){
++				current->pfstats->file_fault++;
++			}
++
+ 	pte_unmap(page_table);
+ 	/* The VMA was not fully populated on mmap() or missing VM_DONTEXPAND */
+ 	if (!vma->vm_ops->fault)
+@@ -3275,6 +3293,10 @@ out:
+ static int create_huge_pmd(struct mm_struct *mm, struct vm_area_struct *vma,
+ 			unsigned long address, pmd_t *pmd, unsigned int flags)
+ {
++	if(current->pfstats){
++		current->pfstats->transparent_hugepage_fault++;
++	}
++
+ 	if (vma_is_anonymous(vma))
+ 		return do_huge_pmd_anonymous_page(mm, vma, address, pmd, flags);
+ 	if (vma->vm_ops->pmd_fault)
+@@ -3394,6 +3416,11 @@ static int __handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
+ 	pmd = pmd_alloc(mm, pud, address);
+ 	if (!pmd)
+ 		return VM_FAULT_OOM;
++
++	if(current->pfstats){
++			current->pfstats->fault_alloced_page++;
++		}
++
+ 	if (pmd_none(*pmd) && transparent_hugepage_enabled(vma)) {
+ 		int ret = create_huge_pmd(mm, vma, address, pmd, flags);
+ 		if (!(ret & VM_FAULT_FALLBACK))
+diff --git a/mm/mmap.c b/mm/mmap.c
+index 455772a..64e627f 100644
+--- a/mm/mmap.c
++++ b/mm/mmap.c
+@@ -2216,6 +2216,11 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
+ 	anon_vma_unlock_write(vma->anon_vma);
+ 	khugepaged_enter_vma_merge(vma, vma->vm_flags);
+ 	validate_mm(mm);
++
++	if(current->pfstats){
++		current->pfstats->stack_low++;
++	}
++
+ 	return error;
+ }
+ #endif /* CONFIG_STACK_GROWSUP || CONFIG_IA64 */
+@@ -2286,6 +2291,10 @@ int expand_downwards(struct vm_area_struct *vma,
+ 	anon_vma_unlock_write(vma->anon_vma);
+ 	khugepaged_enter_vma_merge(vma, vma->vm_flags);
+ 	validate_mm(mm);
++	if(current->pfstats){
++		current->pfstats->stack_low++;
++	}
++
+ 	return error;
+ }
  
